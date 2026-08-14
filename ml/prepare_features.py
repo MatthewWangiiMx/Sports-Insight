@@ -16,15 +16,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from team_form import MIN_PRIOR_GAMES, ROLLING_WINDOWS, add_pregame_features, to_team_game_long
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW = REPO_ROOT / "data" / "raw"
 DATA_PROCESSED = REPO_ROOT / "data" / "processed"
-
-# Rolling window sizes (in games) used for "recent form" features.
-ROLLING_WINDOWS = [5, 10]
-# A team needs at least this many prior games *in the season* before its
-# rolling/season features are considered reliable enough to keep.
-MIN_PRIOR_GAMES = 3
 
 TRAIN_SEASONS = list(range(2016, 2024))  # 2016-2023
 VAL_SEASONS = [2024]
@@ -37,67 +33,6 @@ def load_games() -> pd.DataFrame:
     games["date"] = pd.to_datetime(games["date"])
     games = games.sort_values("date").reset_index(drop=True)
     return games
-
-
-def to_team_game_long(games: pd.DataFrame) -> pd.DataFrame:
-    """One row per (team, game): the team-centric view used to compute rolling stats."""
-    home = pd.DataFrame(
-        {
-            "game_id": games["id"],
-            "date": games["date"],
-            "season": games["season"],
-            "postseason": games["postseason"],
-            "team_id": games["home_team_id"],
-            "opponent_id": games["visitor_team_id"],
-            "is_home": True,
-            "team_score": games["home_team_score"],
-            "opp_score": games["visitor_team_score"],
-        }
-    )
-    away = pd.DataFrame(
-        {
-            "game_id": games["id"],
-            "date": games["date"],
-            "season": games["season"],
-            "postseason": games["postseason"],
-            "team_id": games["visitor_team_id"],
-            "opponent_id": games["home_team_id"],
-            "is_home": False,
-            "team_score": games["visitor_team_score"],
-            "opp_score": games["home_team_score"],
-        }
-    )
-    long_df = pd.concat([home, away], ignore_index=True)
-    long_df["win"] = (long_df["team_score"] > long_df["opp_score"]).astype(int)
-    long_df["point_diff"] = long_df["team_score"] - long_df["opp_score"]
-    long_df = long_df.sort_values(["team_id", "date"]).reset_index(drop=True)
-    return long_df
-
-
-def add_pregame_features(long_df: pd.DataFrame) -> pd.DataFrame:
-    """Add rolling/expanding stats computed strictly from *prior* games (shift(1))."""
-    g = long_df.groupby("team_id", group_keys=False)
-    long_df["games_played_career"] = g.cumcount()
-
-    # Rest days since the team's previous game (any season). First game ever -> NaN.
-    long_df["prev_game_date"] = g["date"].shift(1)
-    long_df["rest_days"] = (long_df["date"] - long_df["prev_game_date"]).dt.days
-    long_df["is_back_to_back"] = (long_df["rest_days"] <= 1).astype("Int64")
-
-    # Season-scoped rolling/expanding stats: reset each season since rosters change.
-    season_g = long_df.groupby(["team_id", "season"], group_keys=False)
-    long_df["games_played_season"] = season_g.cumcount()
-    long_df["win_pct_season"] = season_g["win"].apply(lambda s: s.shift(1).expanding().mean())
-
-    for window in ROLLING_WINDOWS:
-        long_df[f"win_pct_last{window}"] = season_g["win"].apply(
-            lambda s, w=window: s.shift(1).rolling(w, min_periods=1).mean()
-        )
-        long_df[f"point_diff_last{window}"] = season_g["point_diff"].apply(
-            lambda s, w=window: s.shift(1).rolling(w, min_periods=1).mean()
-        )
-
-    return long_df
 
 
 def build_game_features(games: pd.DataFrame, team_features: pd.DataFrame) -> pd.DataFrame:
