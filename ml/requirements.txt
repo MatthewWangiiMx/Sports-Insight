@@ -7,3 +7,4 @@ jupyter>=1.1
 requests>=2.32
 python-dotenv>=1.1
 pyarrow>=18.0
+nba_api>=1.11

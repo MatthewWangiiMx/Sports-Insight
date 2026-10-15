@@ -26,6 +26,7 @@ ML_DIR = Path(__file__).resolve().parent
 REPO_ROOT = ML_DIR.parent
 DATA_PROCESSED = REPO_ROOT / "data" / "processed"
 MODELS_DIR = ML_DIR / "models"
+MODEL_NAME = "winprob_v2"
 
 
 def load_split(df: pd.DataFrame, features: list[str], target: str, split_name: str) -> tuple[pd.DataFrame, pd.Series]:
@@ -85,11 +86,11 @@ def main() -> None:
     print(coefs.to_string())
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODELS_DIR / "winprob_v1.pkl"
+    model_path = MODELS_DIR / f"{MODEL_NAME}.pkl"
     joblib.dump({"model": model, "features": features, "target": target}, model_path)
     print(f"\nsaved model -> {model_path.relative_to(REPO_ROOT)}")
 
-    with open(MODELS_DIR / "winprob_v1_metrics.json", "w") as f:
+    with open(MODELS_DIR / f"{MODEL_NAME}_metrics.json", "w") as f:
         json.dump(
             {"baseline_train_rate": train_rate, "results": results, "coefficients": coefs.to_dict()},
             f,

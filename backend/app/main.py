@@ -4,13 +4,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import data
 from .model import InsufficientHistoryError, ModelNotTrainedError, predict_home_win_probability
-from .schemas import PredictRequest, PredictResponse, TeamOut, TeamSeasonStats
+from .schemas import HeadToHead, PredictRequest, PredictResponse, StandingsRow, TeamOut, TeamSeasonStats
 
 app = FastAPI(title="Sports Insight API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    # Matches any localhost dev port, not just Vite's default 5173 - Vite silently
+    # bumps to 5174+ when 5173 is already taken, which otherwise breaks every
+    # frontend request with an opaque CORS rejection rather than a clear error.
+    allow_origin_regex=r"http://localhost:\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,22 +42,31 @@ def team_season_stats(team_id: int, season: int | None = None) -> dict:
     if data.get_team(team_id) is None:
         raise HTTPException(status_code=404, detail=f"no team with id {team_id}")
 
-    season = season if season is not None else int(data.GAMES["season"].max())
-    games = data.team_games(team_id)
-    games = games[games["season"] == season]
-    if games.empty:
+    season = season if season is not None else data.LATEST_SEASON
+    stats = data.team_season_stats(team_id, season)
+    if stats is None:
         raise HTTPException(status_code=404, detail=f"no games found for team {team_id} in season {season}")
+    return stats
 
-    wins = int(games["win"].sum())
-    return {
-        "team_id": team_id,
-        "season": season,
-        "games_played": int(len(games)),
-        "wins": wins,
-        "losses": int(len(games)) - wins,
-        "win_pct": float(games["win"].mean()),
-        "avg_point_diff": float(games["point_diff"].mean()),
-    }
+
+@app.get("/standings", response_model=list[StandingsRow])
+def standings(season: int | None = None) -> list[dict]:
+    season = season if season is not None else data.LATEST_SEASON
+    rows = data.season_standings(season)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"no games found for season {season}")
+    return rows
+
+
+@app.get("/teams/{team_a_id}/vs/{team_b_id}", response_model=HeadToHead)
+def head_to_head(team_a_id: int, team_b_id: int) -> dict:
+    team_a = data.get_team(team_a_id)
+    team_b = data.get_team(team_b_id)
+    if team_a is None:
+        raise HTTPException(status_code=404, detail=f"no team with id {team_a_id}")
+    if team_b is None:
+        raise HTTPException(status_code=404, detail=f"no team with id {team_b_id}")
+    return {"team_a": team_a, "team_b": team_b, **data.head_to_head(team_a_id, team_b_id)}
 
 
 @app.post("/predict/winprob", response_model=PredictResponse)
@@ -90,4 +102,5 @@ def predict_winprob(req: PredictRequest) -> dict:
         "as_of_date": as_of.date(),
         "season": result["season"],
         "model_version": result["model_version"],
+        "factors": result["factors"],
     }
