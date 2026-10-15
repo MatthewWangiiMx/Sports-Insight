@@ -6,6 +6,14 @@ export interface Team {
   division: string
 }
 
+export interface GameLogEntry {
+  date: string
+  opponent_abbreviation: string
+  is_home: boolean
+  win: boolean
+  point_diff: number
+}
+
 export interface TeamSeasonStats {
   team_id: number
   season: number
@@ -14,6 +22,39 @@ export interface TeamSeasonStats {
   losses: number
   win_pct: number
   avg_point_diff: number
+  home_wins: number
+  home_losses: number
+  away_wins: number
+  away_losses: number
+  current_streak: string
+  game_log: GameLogEntry[]
+}
+
+export interface StandingsRow {
+  team: Team
+  season: number
+  wins: number
+  losses: number
+  win_pct: number
+  conference_rank: number
+  division_rank: number
+  games_behind: number
+}
+
+export interface HeadToHead {
+  team_a: Team
+  team_b: Team
+  team_a_wins: number
+  team_b_wins: number
+  games_played: number
+  last_meeting_date: string | null
+  last_meeting_winner_id: number | null
+}
+
+export interface PredictionFactor {
+  label: string
+  favors: 'home' | 'away'
+  impact_pct: number
 }
 
 export interface PredictRequest {
@@ -31,6 +72,7 @@ export interface PredictResponse {
   as_of_date: string
   season: number
   model_version: string
+  factors: PredictionFactor[]
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
@@ -58,4 +100,13 @@ export function getTeamStats(teamId: number, season?: number): Promise<TeamSeaso
 
 export function predictWinProb(body: PredictRequest): Promise<PredictResponse> {
   return request('/predict/winprob', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function getStandings(season?: number): Promise<StandingsRow[]> {
+  const qs = season != null ? `?season=${season}` : ''
+  return request(`/standings${qs}`)
+}
+
+export function getHeadToHead(teamAId: number, teamBId: number): Promise<HeadToHead> {
+  return request(`/teams/${teamAId}/vs/${teamBId}`)
 }
