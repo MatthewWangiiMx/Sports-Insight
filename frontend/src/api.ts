@@ -12,7 +12,26 @@ export interface GameLogEntry {
   is_home: boolean
   win: boolean
   point_diff: number
+  elo: number
 }
+
+export interface RankedStat {
+  value: number
+  rank: number
+}
+
+export type AdvancedStatKey =
+  | 'ppg'
+  | 'opp_ppg'
+  | 'off_rtg'
+  | 'def_rtg'
+  | 'net_rtg'
+  | 'pace'
+  | 'efg'
+  | 'opp_efg'
+  | 'tov_pct'
+  | 'oreb_pct'
+  | 'ft_rate'
 
 export interface TeamSeasonStats {
   team_id: number
@@ -27,6 +46,8 @@ export interface TeamSeasonStats {
   away_wins: number
   away_losses: number
   current_streak: string
+  elo: number
+  advanced: Record<AdvancedStatKey, RankedStat>
   game_log: GameLogEntry[]
 }
 
@@ -36,6 +57,7 @@ export interface StandingsRow {
   wins: number
   losses: number
   win_pct: number
+  elo: number
   conference_rank: number
   division_rank: number
   games_behind: number
@@ -75,6 +97,76 @@ export interface PredictResponse {
   factors: PredictionFactor[]
 }
 
+export interface PlayerSummary {
+  id: number
+  name: string
+  team_abbreviation: string
+  last_season: number
+}
+
+export interface PlayerAverages {
+  games_played: number
+  min: number
+  pts: number
+  reb: number
+  ast: number
+  stl: number
+  blk: number
+  tov: number
+  fg3m: number
+  fg_pct: number | null
+  fg3_pct: number | null
+  ft_pct: number | null
+  plus_minus: number
+  game_score: number
+}
+
+export interface PlayerGameLogEntry {
+  date: string
+  team_abbreviation: string
+  opponent_abbreviation: string
+  is_home: boolean
+  win: boolean
+  min: number
+  pts: number
+  reb: number
+  ast: number
+  stl: number
+  blk: number
+  fgm: number
+  fga: number
+  fg3m: number
+  fg3a: number
+  plus_minus: number
+  game_score: number
+}
+
+export interface PlayerStats {
+  player_id: number
+  name: string
+  season: number
+  seasons: number[]
+  teams: string[]
+  averages: PlayerAverages
+  game_log: PlayerGameLogEntry[]
+}
+
+export interface RosterEntry extends PlayerAverages {
+  player_id: number
+  name: string
+}
+
+export type LeaderStat = 'pts' | 'reb' | 'ast' | 'stl' | 'blk' | 'fg3m' | 'game_score'
+
+export interface LeaderEntry {
+  rank: number
+  player_id: number
+  name: string
+  team_abbreviation: string
+  games_played: number
+  value: number
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -109,4 +201,24 @@ export function getStandings(season?: number): Promise<StandingsRow[]> {
 
 export function getHeadToHead(teamAId: number, teamBId: number): Promise<HeadToHead> {
   return request(`/teams/${teamAId}/vs/${teamBId}`)
+}
+
+export function getRoster(teamId: number, season?: number): Promise<RosterEntry[]> {
+  const qs = season != null ? `?season=${season}` : ''
+  return request(`/teams/${teamId}/roster${qs}`)
+}
+
+export function getPlayers(): Promise<PlayerSummary[]> {
+  return request('/players')
+}
+
+export function getPlayerStats(playerId: number, season?: number): Promise<PlayerStats> {
+  const qs = season != null ? `?season=${season}` : ''
+  return request(`/players/${playerId}/stats${qs}`)
+}
+
+export function getLeaders(stat: LeaderStat, season?: number, limit = 10): Promise<LeaderEntry[]> {
+  const params = new URLSearchParams({ stat, limit: String(limit) })
+  if (season != null) params.set('season', String(season))
+  return request(`/leaders?${params}`)
 }

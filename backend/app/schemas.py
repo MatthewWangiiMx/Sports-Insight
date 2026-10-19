@@ -20,6 +20,12 @@ class GameLogEntry(BaseModel):
     is_home: bool
     win: bool
     point_diff: int
+    elo: float
+
+
+class RankedStat(BaseModel):
+    value: float
+    rank: int
 
 
 class TeamSeasonStats(BaseModel):
@@ -35,6 +41,8 @@ class TeamSeasonStats(BaseModel):
     away_wins: int
     away_losses: int
     current_streak: str
+    elo: float
+    advanced: dict[str, RankedStat]
     game_log: list[GameLogEntry]
 
 
@@ -44,6 +52,7 @@ class StandingsRow(BaseModel):
     wins: int
     losses: int
     win_pct: float
+    elo: float
     conference_rank: int
     division_rank: int
     games_behind: float
@@ -81,3 +90,71 @@ class PredictResponse(BaseModel):
     season: int
     model_version: str
     factors: list[PredictionFactor]
+
+
+class PlayerSummary(BaseModel):
+    id: int
+    name: str
+    team_abbreviation: str
+    last_season: int
+
+
+class PlayerAverages(BaseModel):
+    games_played: int
+    min: float
+    pts: float
+    reb: float
+    ast: float
+    stl: float
+    blk: float
+    tov: float
+    fg3m: float
+    fg_pct: float | None
+    fg3_pct: float | None
+    ft_pct: float | None
+    plus_minus: float
+    game_score: float
+
+
+class PlayerGameLogEntry(BaseModel):
+    date: date
+    team_abbreviation: str
+    opponent_abbreviation: str
+    is_home: bool
+    win: bool
+    min: int
+    pts: int
+    reb: int
+    ast: int
+    stl: int
+    blk: int
+    fgm: int
+    fga: int
+    fg3m: int
+    fg3a: int
+    plus_minus: int
+    game_score: float
+
+
+class PlayerStats(BaseModel):
+    player_id: int
+    name: str
+    season: int
+    seasons: list[int]
+    teams: list[str]
+    averages: PlayerAverages
+    game_log: list[PlayerGameLogEntry]
+
+
+class RosterEntry(PlayerAverages):
+    player_id: int
+    name: str
+
+
+class LeaderEntry(BaseModel):
+    rank: int
+    player_id: int
+    name: str
+    team_abbreviation: str
+    games_played: int
+    value: float

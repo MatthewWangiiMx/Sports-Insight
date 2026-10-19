@@ -8,6 +8,7 @@ refreshing means re-running ml/ingest/run_nba_ingest and restarting the API.
 from __future__ import annotations
 
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -24,9 +25,65 @@ from nba_source import load_player_games, load_team_games, load_teams  # noqa: E
 from ratings import add_ratings  # noqa: E402
 
 TEAMS = load_teams(DATA_RAW_NBA)
-TEAM_GAMES_LONG = add_ratings(load_team_games(DATA_RAW_NBA), load_player_games(DATA_RAW_NBA))
+PLAYER_GAMES = load_player_games(DATA_RAW_NBA)
+TEAM_GAMES_LONG = add_ratings(load_team_games(DATA_RAW_NBA), PLAYER_GAMES)
 LATEST_GAME_DATE: pd.Timestamp = TEAM_GAMES_LONG["date"].max()
 LATEST_SEASON = int(TEAM_GAMES_LONG["season"].max())
+
+# Season-level advanced stats shown on the team page, and whether a higher value
+# is better (for league ranking). Pace has no "better" - rank 1 = fastest.
+ADVANCED_STATS = {
+    "ppg": True,
+    "opp_ppg": False,
+    "off_rtg": True,
+    "def_rtg": False,
+    "net_rtg": True,
+    "pace": True,
+    "efg": True,
+    "opp_efg": False,
+    "tov_pct": False,
+    "oreb_pct": True,
+    "ft_rate": True,
+}
+
+
+@lru_cache(maxsize=None)
+def league_advanced(season: int) -> pd.DataFrame:
+    """Every team's regular-season advanced stats plus league ranks, indexed by
+    team_id. Rates come from season *totals* (e.g. total points / total
+    possessions), not the average of per-game rates, which would let a
+    4-of-4 night count as much as a 12-of-20 one."""
+    g = TEAM_GAMES_LONG[(TEAM_GAMES_LONG["season"] == season) & (~TEAM_GAMES_LONG["postseason"])]
+    if g.empty:
+        return pd.DataFrame()
+    t = g.groupby("team_id")[
+        ["team_score", "opp_score", "possessions", "fgm", "fg3m", "fga", "ftm", "fta", "tov", "oreb",
+         "opp_fgm", "opp_fg3m", "opp_fga", "opp_dreb"]
+    ].sum()
+    games = g.groupby("team_id").size()
+    out = pd.DataFrame(index=t.index)
+    out["ppg"] = t["team_score"] / games
+    out["opp_ppg"] = t["opp_score"] / games
+    out["off_rtg"] = 100 * t["team_score"] / t["possessions"]
+    out["def_rtg"] = 100 * t["opp_score"] / t["possessions"]
+    out["net_rtg"] = out["off_rtg"] - out["def_rtg"]
+    out["pace"] = t["possessions"] / games
+    out["efg"] = (t["fgm"] + 0.5 * t["fg3m"]) / t["fga"]
+    out["opp_efg"] = (t["opp_fgm"] + 0.5 * t["opp_fg3m"]) / t["opp_fga"]
+    out["tov_pct"] = t["tov"] / (t["fga"] + 0.44 * t["fta"] + t["tov"])
+    out["oreb_pct"] = t["oreb"] / (t["oreb"] + t["opp_dreb"])
+    out["ft_rate"] = t["ftm"] / t["fga"]
+    for stat, higher_is_better in ADVANCED_STATS.items():
+        out[f"{stat}_rank"] = out[stat].rank(ascending=not higher_is_better, method="min").astype(int)
+    return out
+
+
+def season_elo(team_id: int, season: int) -> float | None:
+    """Team's Elo after its most recent game of that season (playoffs included -
+    Elo keeps learning from every game, unlike the regular-season record)."""
+    g = team_games(team_id)
+    g = g[g["season"] == season]
+    return None if g.empty else float(g.sort_values("date")["elo_post"].iloc[-1])
 
 
 def get_team(team_id: int) -> dict | None:
@@ -76,9 +133,13 @@ def team_season_stats(team_id: int, season: int) -> dict | None:
             "is_home": bool(row["is_home"]),
             "win": bool(row["win"]),
             "point_diff": int(row["point_diff"]),
+            "elo": float(row["elo_post"]),
         }
         for _, row in games.iterrows()
     ]
+
+    adv = league_advanced(season).loc[team_id]
+    advanced = {stat: {"value": float(adv[stat]), "rank": int(adv[f"{stat}_rank"])} for stat in ADVANCED_STATS}
 
     return {
         "team_id": team_id,
@@ -93,6 +154,8 @@ def team_season_stats(team_id: int, season: int) -> dict | None:
         "away_wins": away_wins,
         "away_losses": int(len(away_games)) - away_wins,
         "current_streak": current_streak,
+        "elo": season_elo(team_id, season),
+        "advanced": advanced,
         "game_log": game_log,
     }
 
@@ -113,6 +176,7 @@ def season_standings(season: int) -> list[dict]:
                 "wins": wins,
                 "losses": total - wins,
                 "win_pct": wins / total,
+                "elo": season_elo(team["id"], season),
                 "conference": team["conference"],
                 "division": team["division"],
             }

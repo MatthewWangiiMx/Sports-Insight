@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { MatchupPredictor } from './components/MatchupPredictor'
+import { PlayerExplorer } from './components/PlayerExplorer'
 import { Standings } from './components/Standings'
 import { TeamExplorer } from './components/TeamExplorer'
 import './App.css'
 
-type Tab = 'predict' | 'teams' | 'standings'
+type Tab = 'predict' | 'teams' | 'players' | 'standings'
 
 const TABS: { id: Tab; label: string; title: string; description: string }[] = [
   {
@@ -17,19 +18,33 @@ const TABS: { id: Tab; label: string; title: string; description: string }[] = [
     id: 'teams',
     label: 'Teams',
     title: 'Team explorer',
-    description: 'Season record, home/away splits, and recent form by team.',
+    description: 'Record, Elo, advanced ratings with league ranks, and the roster.',
+  },
+  {
+    id: 'players',
+    label: 'Players',
+    title: 'Player explorer',
+    description: 'League leaders, season averages, and full game logs.',
   },
   {
     id: 'standings',
     label: 'Standings',
     title: 'League standings',
-    description: 'Regular-season rankings by conference.',
+    description: 'Conference standings and Elo power rankings.',
   },
 ]
 
 function App() {
   const [tab, setTab] = useState<Tab>('predict')
+  // Lives here (not in PlayerExplorer) so other tabs - e.g. a team's roster -
+  // can open a player's page.
+  const [playerId, setPlayerId] = useState<number | null>(null)
   const active = TABS.find((t) => t.id === tab)!
+
+  function openPlayer(id: number) {
+    setPlayerId(id)
+    setTab('players')
+  }
 
   return (
     <div className="app-shell">
@@ -62,7 +77,8 @@ function App() {
         </div>
         <div className="page-content" key={tab}>
           {tab === 'predict' && <MatchupPredictor />}
-          {tab === 'teams' && <TeamExplorer />}
+          {tab === 'teams' && <TeamExplorer onOpenPlayer={openPlayer} />}
+          {tab === 'players' && <PlayerExplorer playerId={playerId} onSelectPlayer={setPlayerId} />}
           {tab === 'standings' && <Standings />}
         </div>
       </main>

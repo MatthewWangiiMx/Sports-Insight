@@ -2,9 +2,20 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import data
+from . import data, players
 from .model import InsufficientHistoryError, ModelNotTrainedError, predict_home_win_probability
-from .schemas import HeadToHead, PredictRequest, PredictResponse, StandingsRow, TeamOut, TeamSeasonStats
+from .schemas import (
+    HeadToHead,
+    LeaderEntry,
+    PlayerStats,
+    PlayerSummary,
+    PredictRequest,
+    PredictResponse,
+    RosterEntry,
+    StandingsRow,
+    TeamOut,
+    TeamSeasonStats,
+)
 
 app = FastAPI(title="Sports Insight API")
 
@@ -67,6 +78,34 @@ def head_to_head(team_a_id: int, team_b_id: int) -> dict:
     if team_b is None:
         raise HTTPException(status_code=404, detail=f"no team with id {team_b_id}")
     return {"team_a": team_a, "team_b": team_b, **data.head_to_head(team_a_id, team_b_id)}
+
+
+@app.get("/teams/{team_id}/roster", response_model=list[RosterEntry])
+def team_roster(team_id: int, season: int | None = None) -> list[dict]:
+    if data.get_team(team_id) is None:
+        raise HTTPException(status_code=404, detail=f"no team with id {team_id}")
+    return players.team_roster(team_id, season if season is not None else data.LATEST_SEASON)
+
+
+@app.get("/players", response_model=list[PlayerSummary])
+def list_players() -> list[dict]:
+    return players.list_players()
+
+
+@app.get("/players/{player_id}/stats", response_model=PlayerStats)
+def player_stats(player_id: int, season: int | None = None) -> dict:
+    stats = players.player_stats(player_id, season)
+    if stats is None:
+        detail = f"no regular-season games for player {player_id}" + (f" in season {season}" if season else "")
+        raise HTTPException(status_code=404, detail=detail)
+    return stats
+
+
+@app.get("/leaders", response_model=list[LeaderEntry])
+def leaders(stat: str = "pts", season: int | None = None, limit: int = 10) -> list[dict]:
+    if stat not in players.LEADER_STATS:
+        raise HTTPException(status_code=400, detail=f"stat must be one of: {', '.join(players.LEADER_STATS)}")
+    return players.leaders(season if season is not None else data.LATEST_SEASON, stat, max(1, min(limit, 50)))
 
 
 @app.post("/predict/winprob", response_model=PredictResponse)
