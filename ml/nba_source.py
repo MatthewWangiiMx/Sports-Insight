@@ -36,6 +36,20 @@ def load_team_games(raw_dir: Path) -> pd.DataFrame:
     return long_df.sort_values(["team_id", "date"]).reset_index(drop=True)
 
 
+def load_player_games(raw_dir: Path) -> pd.DataFrame:
+    """Player game logs for players who actually got on the court, with a
+    per-game Hollinger Game Score - a one-number box-score summary of a game."""
+    frames = [pd.read_parquet(f) for f in sorted(raw_dir.glob("player_games_*.parquet"))]
+    pg = pd.concat(frames, ignore_index=True).rename(columns=str.lower).rename(columns={"game_date": "date"})
+    pg = pg[pg["min"] > 0].copy()
+    pg["game_score"] = (
+        pg["pts"] + 0.4 * pg["fgm"] - 0.7 * pg["fga"] - 0.4 * (pg["fta"] - pg["ftm"])
+        + 0.7 * pg["oreb"] + 0.3 * pg["dreb"] + pg["stl"] + 0.7 * pg["ast"] + 0.7 * pg["blk"]
+        - 0.4 * pg["pf"] - pg["tov"]
+    )
+    return pg.sort_values(["player_id", "date"]).reset_index(drop=True)
+
+
 def _add_advanced_stats(df: pd.DataFrame) -> None:
     # Possessions: the common box-score estimate, averaged over both teams since
     # each team's own estimate is noisy but they played (nearly) the same number.

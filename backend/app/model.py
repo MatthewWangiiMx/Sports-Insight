@@ -18,9 +18,9 @@ from .data import ML_DIR, REPO_ROOT, team_games
 if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
-from team_form import add_matchup_features, season_for_date, team_form_as_of  # noqa: E402
+from team_form import add_matchup_features, resolve_season, team_form_as_of  # noqa: E402
 
-MODEL_VERSION = "winprob_v2"
+MODEL_VERSION = "winprob_v3"
 MODEL_PATH = ML_DIR / "models" / f"{MODEL_VERSION}.pkl"
 
 TOP_FACTOR_COUNT = 5
@@ -42,6 +42,8 @@ STAT_LABELS = {
 FIXED_LABELS = {
     "rest_days_diff": "Rest advantage",
     "win_pct_season_diff": "Season win rate edge",
+    "elo_diff": "Elo rating edge",
+    "roster_strength_diff": "Roster strength edge",
 }
 
 # Yes/no features need the label to reflect the actual value: a contribution is
@@ -90,7 +92,7 @@ except ModelNotTrainedError:
 def _team_features(team_id: int, as_of: pd.Timestamp) -> dict:
     form = team_form_as_of(team_games(team_id), as_of)
     if form is None:
-        raise InsufficientHistoryError(team_id, season_for_date(as_of))
+        raise InsufficientHistoryError(team_id, resolve_season(team_games(team_id), as_of))
     return form
 
 
@@ -123,7 +125,7 @@ def predict_home_win_probability(
     return {
         "home_win_probability": home_win_probability,
         "away_win_probability": 1.0 - home_win_probability,
-        "season": season_for_date(as_of),
+        "season": resolve_season(team_games(home_team_id), as_of),
         "home_form": home,
         "away_form": away,
         "model_version": MODEL_VERSION,

@@ -7,11 +7,16 @@ using the same functions in both places means the API can never silently
 drift from what the model was actually trained on.
 
 Input is the team-centric long table from nba_source.load_team_games.
+
+Input is the team-centric long table from nba_source.load_team_games, with
+ratings.add_ratings already applied (elo / roster_strength columns).
 """
 
 from __future__ import annotations
 
 import pandas as pd
+
+from ratings import carry_over
 
 # Rolling window sizes (in games) used for "recent form" features.
 ROLLING_WINDOWS = [5, 10]
@@ -41,8 +46,9 @@ FORM_STATS = {
 
 ROLLING_FEATURES = [f"{prefix}_last{w}" for prefix in FORM_STATS.values() for w in ROLLING_WINDOWS]
 
-# Per-team pre-game features computed for each side of a matchup.
-TEAM_FEATURES = ["rest_days", "is_back_to_back", "win_pct_season", *ROLLING_FEATURES]
+# Per-team pre-game features computed for each side of a matchup. elo and
+# roster_strength come from ratings.add_ratings.
+TEAM_FEATURES = ["rest_days", "is_back_to_back", "win_pct_season", "elo", "roster_strength", *ROLLING_FEATURES]
 
 # Which rolling stats the model actually uses. The ratings / Four Factors are
 # still computed (for display), but in a linear model they added no accuracy
@@ -57,6 +63,8 @@ MODEL_STAT_PREFIXES = ["win_pct", "point_diff"]
 DIFF_FEATURES = [
     "rest_days",
     "win_pct_season",
+    "elo",
+    "roster_strength",
     *[f"{p}_last{w}" for p in MODEL_STAT_PREFIXES for w in ROLLING_WINDOWS],
 ]
 
@@ -73,9 +81,21 @@ MODEL_FEATURES = [
 def season_for_date(date: pd.Timestamp) -> int:
     """NBA seasons are labeled by their starting year (e.g. "2023" = 2023-24).
     Regular season/playoffs run roughly Oct-June; treat Aug/Sep as the start
-    of the *next* season (preseason).
+    of the *next* season (preseason). Only a guess - see resolve_season.
     """
     return date.year if date.month >= 8 else date.year - 1
+
+
+def resolve_season(team_games: pd.DataFrame, as_of: pd.Timestamp) -> int:
+    """Which season a game on `as_of` belongs to. Uses the real season label of
+    the team's next scheduled game when the data has one (a season label is
+    schedule info, not a result), so seasons that ran late - like the 2020
+    bubble playoffs in Aug-Oct, which belong to 2019-20 - resolve correctly.
+    Falls back to the month-based guess for genuinely future dates."""
+    upcoming = team_games[team_games["date"] >= as_of]
+    if not upcoming.empty:
+        return int(upcoming.sort_values("date")["season"].iloc[0])
+    return season_for_date(as_of)
 
 
 def add_pregame_features(long_df: pd.DataFrame) -> pd.DataFrame:
@@ -126,19 +146,28 @@ def team_form_as_of(team_games: pd.DataFrame, as_of: pd.Timestamp, min_prior_gam
     Returns None if the team hasn't played `min_prior_games` games yet in the
     season `as_of` falls into (too little signal to trust).
     """
-    season = season_for_date(as_of)
+    season = resolve_season(team_games, as_of)
     season_games = team_games[(team_games["season"] == season) & (team_games["date"] < as_of)].sort_values("date")
     if len(season_games) < min_prior_games:
         return None
 
     prior_games = team_games[team_games["date"] < as_of].sort_values("date")
-    rest_days = min(int((as_of - prior_games["date"].iloc[-1]).days), REST_DAYS_CAP)
+    last_game = prior_games.iloc[-1]
+    rest_days = min(int((as_of - last_game["date"]).days), REST_DAYS_CAP)
+
+    # Ratings as they stand after the team's most recent game - exactly what the
+    # training table's pre-game "elo" / "roster_strength" would be for a next game.
+    elo = float(last_game["elo_post"])
+    if int(last_game["season"]) != season:
+        elo = carry_over(elo)
 
     features = {
         "games_played_season": int(len(season_games)),
         "rest_days": rest_days,
         "is_back_to_back": int(rest_days <= 1),
         "win_pct_season": float(season_games["win"].mean()),
+        "elo": elo,
+        "roster_strength": float(last_game["roster_after"]),
     }
     for stat, prefix in FORM_STATS.items():
         for window in ROLLING_WINDOWS:

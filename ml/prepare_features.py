@@ -1,7 +1,7 @@
 """Turn raw stats.nba.com game logs into a model-ready, leakage-free feature table.
 
-Reads data/raw/nba/team_games_*.parquet, builds pre-game team-level features
-(rolling win %, margin, offensive/defensive rating, Four Factors, rest days)
+Reads data/raw/nba/team_games_*.parquet and player_games_*.parquet, builds
+pre-game team-level features (Elo, roster strength, rolling win %, margin, rest)
 computed only from games strictly before the game being predicted, and writes
 a time-based train/val/test split plus a feature schema to data/processed/.
 
@@ -16,7 +16,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from nba_source import load_team_games
+from nba_source import load_player_games, load_team_games
+from ratings import add_ratings
 from team_form import (
     MIN_PRIOR_GAMES,
     MODEL_FEATURES,
@@ -75,7 +76,8 @@ def split_and_clean(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    long_df = add_pregame_features(load_team_games(DATA_RAW_NBA))
+    long_df = add_ratings(load_team_games(DATA_RAW_NBA), load_player_games(DATA_RAW_NBA))
+    long_df = add_pregame_features(long_df)
     df = split_and_clean(build_game_features(long_df))
 
     DATA_PROCESSED.mkdir(parents=True, exist_ok=True)

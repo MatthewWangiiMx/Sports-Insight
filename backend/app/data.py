@@ -20,10 +20,11 @@ ML_DIR = REPO_ROOT / "ml"
 if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
-from nba_source import load_team_games, load_teams  # noqa: E402
+from nba_source import load_player_games, load_team_games, load_teams  # noqa: E402
+from ratings import add_ratings  # noqa: E402
 
 TEAMS = load_teams(DATA_RAW_NBA)
-TEAM_GAMES_LONG = load_team_games(DATA_RAW_NBA)
+TEAM_GAMES_LONG = add_ratings(load_team_games(DATA_RAW_NBA), load_player_games(DATA_RAW_NBA))
 LATEST_GAME_DATE: pd.Timestamp = TEAM_GAMES_LONG["date"].max()
 LATEST_SEASON = int(TEAM_GAMES_LONG["season"].max())
 

@@ -26,7 +26,7 @@ ML_DIR = Path(__file__).resolve().parent
 REPO_ROOT = ML_DIR.parent
 DATA_PROCESSED = REPO_ROOT / "data" / "processed"
 MODELS_DIR = ML_DIR / "models"
-MODEL_NAME = "winprob_v2"
+MODEL_NAME = "winprob_v3"
 
 
 def load_split(df: pd.DataFrame, features: list[str], target: str, split_name: str) -> tuple[pd.DataFrame, pd.Series]:
