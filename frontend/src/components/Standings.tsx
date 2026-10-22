@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getStandings, type StandingsRow } from '../api'
 import { num, pct } from '../format'
+import { TeamLogo } from './Logos'
 import { SeasonPicker } from './SeasonPicker'
 import { Skeleton } from './Skeleton'
 
@@ -78,7 +79,12 @@ export function Standings() {
                 : power.map((r, i) => (
                     <tr key={r.team.id} className={i === 0 ? 'leader' : ''}>
                       <td className="rank-cell">{i + 1}</td>
-                      <td className="team-cell">{r.team.full_name}</td>
+                      <td className="team-cell">
+                        <span className="team-inline">
+                          <TeamLogo abbreviation={r.team.abbreviation} teamId={r.team.id} size={20} />
+                          {r.team.full_name}
+                        </span>
+                      </td>
                       <td className="win-pct">{num(r.elo, 0)}</td>
                       <td>{r.wins}</td>
                       <td>{r.losses}</td>
@@ -119,7 +125,12 @@ function ConferenceTable({ title, rows, loading }: { title: string; rows: Standi
             rows.map((r) => (
               <tr key={r.team.id} className={r.conference_rank === 1 ? 'leader' : ''}>
                 <td className="rank-cell">{r.conference_rank}</td>
-                <td className="team-cell">{r.team.full_name}</td>
+                <td className="team-cell">
+                  <span className="team-inline">
+                    <TeamLogo abbreviation={r.team.abbreviation} teamId={r.team.id} size={20} />
+                    {r.team.full_name}
+                  </span>
+                </td>
                 <td>{r.wins}</td>
                 <td>{r.losses}</td>
                 <td className="win-pct">{pct(r.win_pct)}</td>

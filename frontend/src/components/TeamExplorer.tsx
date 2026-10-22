@@ -8,7 +8,9 @@ import {
   type Team,
   type TeamSeasonStats,
 } from '../api'
+import { teamTheme } from '../branding'
 import { num, pct, rankTone, signed } from '../format'
+import { Headshot, TeamLogo } from './Logos'
 import { SeasonPicker } from './SeasonPicker'
 import { Skeleton } from './Skeleton'
 import { Sparkline } from './Sparkline'
@@ -112,7 +114,7 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                 className={t.id === selectedId ? 'team-row selected' : 'team-row'}
                 onClick={() => selectTeam(t.id)}
               >
-                <span className="abbr">{t.abbreviation}</span>
+                <TeamLogo abbreviation={t.abbreviation} teamId={t.id} size={24} />
                 <span>{t.full_name}</span>
               </button>
             </li>
@@ -120,7 +122,7 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
         </ul>
       </div>
 
-      <div className="team-detail">
+      <div className="team-detail themed" style={teamTheme(selectedTeam?.abbreviation)}>
         {selectedId == null ? (
           <div className="empty-state">
             <BasketballIcon />
@@ -128,10 +130,26 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
           </div>
         ) : (
           <>
-            <div className="detail-head">
-              <h3>{selectedTeam?.full_name}</h3>
-              <SeasonPicker season={season ?? stats?.season ?? null} onChange={setSeason} max={latestSeason} />
-            </div>
+            {selectedTeam && (
+              <div className="hero" key={selectedTeam.id}>
+                <TeamLogo abbreviation={selectedTeam.abbreviation} teamId={selectedTeam.id} size={260} className="hero-watermark" />
+                <div className="hero-media">
+                  <TeamLogo abbreviation={selectedTeam.abbreviation} teamId={selectedTeam.id} size={84} />
+                </div>
+                <div className="hero-text">
+                  <span className="hero-kicker">
+                    {selectedTeam.conference} &middot; {selectedTeam.division}
+                  </span>
+                  <h3>{selectedTeam.full_name}</h3>
+                  <span className="hero-sub">
+                    {stats && !loading ? `${stats.wins}-${stats.losses} · Elo ${num(stats.elo, 0)}` : ' '}
+                  </span>
+                </div>
+                <div className="hero-actions">
+                  <SeasonPicker season={season ?? stats?.season ?? null} onChange={setSeason} max={latestSeason} />
+                </div>
+              </div>
+            )}
 
             {error && <p className="error">{error}</p>}
 
@@ -220,7 +238,12 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                       <tbody>
                         {roster.map((p) => (
                           <tr key={p.player_id} className="clickable" onClick={() => onOpenPlayer(p.player_id)}>
-                            <td className="name-cell">{p.name}</td>
+                            <td className="name-cell">
+                              <span className="person">
+                                <Headshot playerId={p.player_id} name={p.name} />
+                                {p.name}
+                              </span>
+                            </td>
                             <td>{p.games_played}</td>
                             <td>{num(p.min)}</td>
                             <td className="strong">{num(p.pts)}</td>

@@ -1,5 +1,30 @@
 .app-shell {
   min-height: 100svh;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Slowly drifting color glow behind everything, so the page isn't one flat color. */
+.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: -20vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 38vmax at 18% 12%, var(--glow-1), transparent 62%),
+    radial-gradient(34vmax 34vmax at 85% 18%, var(--glow-2), transparent 62%),
+    radial-gradient(44vmax 44vmax at 55% 95%, var(--glow-3), transparent 62%);
+  animation: glow-drift 30s ease-in-out infinite alternate;
+}
+
+@keyframes glow-drift {
+  from {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(3vmax, -2vmax, 0) rotate(8deg);
+  }
 }
 
 /* Top bar */
@@ -11,6 +36,25 @@
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
+}
+
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), #3b82f6, transparent);
+  background-size: 200% 100%;
+  animation: line-flow 8s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes line-flow {
+  to {
+    background-position: -200% 0;
+  }
 }
 
 .topbar-inner {
@@ -78,8 +122,8 @@ nav button:hover:not(.active) {
 }
 
 nav button.active {
-  background: var(--surface);
-  color: var(--text-h);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: white;
   box-shadow: var(--shadow-sm);
 }
 
@@ -97,6 +141,14 @@ nav button.active {
 
 .page-head h2 {
   margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  background: linear-gradient(90deg, var(--text-h) 35%, var(--accent) 80%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
 }
 
 .page-desc {
@@ -122,7 +174,8 @@ nav button.active {
 /* Panel / card */
 
 .panel {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(18px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -385,6 +438,9 @@ nav button.active {
 }
 
 .stat {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -392,6 +448,21 @@ nav button.active {
   border-radius: var(--radius-sm);
   background: var(--bg);
   border: 1px solid var(--border);
+}
+
+/* Thin color bar on top of each tile - team colors when inside a themed page. */
+.stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--team-1, var(--accent)), var(--team-2, var(--accent-2)));
+}
+
+.stat:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+  border-color: var(--accent-border);
 }
 
 .stat-value {
@@ -655,16 +726,18 @@ nav button.active {
   transition: width 0.35s ease;
 }
 
-.prob-segment.home {
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+.prob-segment.home,
+.prob-segment.away {
+  background: linear-gradient(135deg, var(--team-1), color-mix(in srgb, var(--team-1) 60%, #000));
   color: white;
+}
+
+.prob-segment.home {
   justify-content: flex-start;
   padding-left: 12px;
 }
 
 .prob-segment.away {
-  background: var(--code-bg);
-  color: var(--text-h);
   justify-content: flex-end;
   padding-right: 12px;
 }
@@ -1082,5 +1155,382 @@ nav button.active {
 
   .vs-divider {
     justify-self: center;
+  }
+}
+
+/* Logos and headshots */
+
+.team-logo {
+  object-fit: contain;
+  flex: none;
+  transition: transform 0.15s;
+}
+
+.logo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.headshot {
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 12%;
+  background: var(--code-bg);
+}
+
+.headshot.portrait {
+  border-radius: 0;
+  background: transparent;
+  object-fit: contain;
+  object-position: bottom;
+}
+
+.headshot-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.team-row:hover .team-logo,
+.team-row.selected .team-logo {
+  transform: scale(1.12);
+}
+
+.person,
+.team-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opp-prefix {
+  opacity: 0.55;
+  width: 16px;
+}
+
+/* Hero banner: team-colored header on team and player pages. --team-1/--team-2
+   come from teamTheme() in branding.ts. */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  min-height: 128px;
+  margin-bottom: 18px;
+  padding: 20px 24px;
+  border-radius: var(--radius);
+  color: #fff;
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--team-2) 55%, transparent), transparent 55%),
+    linear-gradient(135deg, var(--team-1), color-mix(in srgb, var(--team-1) 55%, #000));
+  box-shadow: var(--shadow-lift);
+  animation: hero-in 0.35s ease;
+}
+
+/* A light sheen that sweeps across now and then. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.13) 50%, transparent 65%);
+  background-size: 300% 100%;
+  animation: sheen 7s ease-in-out infinite;
+}
+
+@keyframes sheen {
+  0%,
+  60% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-watermark {
+  position: absolute;
+  z-index: -1;
+  right: -50px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-10deg);
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.hero-media {
+  flex: none;
+  padding: 10px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.45);
+  display: flex;
+}
+
+.hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hero h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.hero-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.8;
+}
+
+.hero-sub {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.hero-actions {
+  margin-left: auto;
+}
+
+.hero .season-picker,
+.hero .season-select {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.hero .season-picker button,
+.hero .season-picker-value {
+  color: #fff;
+}
+
+.hero .season-picker button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.hero .season-select option {
+  color: var(--text-h);
+  background: var(--surface);
+}
+
+.hero-teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hero-teams .team-logo,
+.hero-teams .logo-fallback {
+  padding: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.hero-arrow {
+  opacity: 0.7;
+}
+
+/* Player variant: the photo sits on the bottom edge, like nba.com. */
+.hero-player {
+  align-items: flex-end;
+  padding-top: 14px;
+  padding-bottom: 0;
+}
+
+.hero-player .hero-text,
+.hero-player .hero-figure,
+.hero-player .hero-actions {
+  align-self: center;
+  padding-bottom: 14px;
+}
+
+.hero-photo {
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.4));
+}
+
+.hero .headshot-fallback.portrait {
+  align-self: center;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.hero-figure {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.hero-number {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.3);
+}
+
+.hero-unit {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.8;
+}
+
+button.hero {
+  width: 100%;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+button.hero:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift), 0 0 0 2px color-mix(in srgb, var(--team-2) 70%, transparent);
+}
+
+.hero-skeleton {
+  margin-bottom: 18px;
+}
+
+/* Matchup face-off cards above the probability bar */
+
+.faceoff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.faceoff-team {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background:
+    radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--team-2) 45%, transparent), transparent 55%),
+    linear-gradient(135deg, var(--team-1), color-mix(in srgb, var(--team-1) 55%, #000));
+  box-shadow: var(--shadow-sm);
+  opacity: 0.8;
+  animation: hero-in 0.35s ease;
+}
+
+.faceoff-team.favored {
+  opacity: 1;
+  box-shadow: var(--shadow-lift);
+}
+
+.faceoff-team .team-logo,
+.faceoff-team .logo-fallback {
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.faceoff-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.faceoff-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.faceoff-pct {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+
+.faceoff-vs {
+  position: absolute;
+  z-index: 1;
+  right: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text-h);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding: 16px;
+  }
+
+  .hero h3 {
+    font-size: 21px;
+  }
+
+  .hero-figure,
+  .hero-actions {
+    margin-left: 0;
+  }
+
+  .faceoff {
+    grid-template-columns: 1fr;
+  }
+
+  .faceoff-vs {
+    display: none;
   }
 }

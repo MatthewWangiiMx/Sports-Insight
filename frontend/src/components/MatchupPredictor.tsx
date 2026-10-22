@@ -7,6 +7,8 @@ import {
   type PredictResponse,
   type Team,
 } from '../api'
+import { teamTheme } from '../branding'
+import { TeamLogo } from './Logos'
 import { Skeleton } from './Skeleton'
 
 export function MatchupPredictor() {
@@ -132,12 +134,38 @@ export function MatchupPredictor() {
 
       {result && !loading && (
         <div className="result">
+          <div className="faceoff">
+            {[
+              { team: result.home_team, p: result.home_win_probability, side: 'Home' },
+              { team: result.away_team, p: result.away_win_probability, side: 'Away' },
+            ].map(({ team, p, side }, i) => (
+              <div
+                key={team.id}
+                className={`faceoff-team ${p >= 0.5 ? 'favored' : ''}`}
+                style={teamTheme(team.abbreviation)}
+              >
+                <TeamLogo abbreviation={team.abbreviation} teamId={team.id} size={72} />
+                <div className="faceoff-text">
+                  <span className="hero-kicker">{side}</span>
+                  <span className="faceoff-name">{team.full_name}</span>
+                  <span className="faceoff-pct">{(p * 100).toFixed(1)}%</span>
+                </div>
+                {i === 0 && <span className="faceoff-vs">VS</span>}
+              </div>
+            ))}
+          </div>
           <div className="prob-bar">
-            <div className="prob-segment home" style={{ width: `${result.home_win_probability * 100}%` }}>
+            <div
+              className="prob-segment home"
+              style={{ ...teamTheme(result.home_team.abbreviation), width: `${result.home_win_probability * 100}%` }}
+            >
               {result.home_win_probability >= 0.12 &&
                 `${result.home_team.abbreviation} ${(result.home_win_probability * 100).toFixed(1)}%`}
             </div>
-            <div className="prob-segment away" style={{ width: `${result.away_win_probability * 100}%` }}>
+            <div
+              className="prob-segment away"
+              style={{ ...teamTheme(result.away_team.abbreviation), width: `${result.away_win_probability * 100}%` }}
+            >
               {result.away_win_probability >= 0.12 &&
                 `${result.away_team.abbreviation} ${(result.away_win_probability * 100).toFixed(1)}%`}
             </div>

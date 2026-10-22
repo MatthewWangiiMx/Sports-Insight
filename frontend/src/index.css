@@ -1,24 +1,30 @@
+/* One dark theme with a deep purple base - the glows, team-colored heroes and
+   logos sit on top of it. */
 :root {
-  --text: #5b5765;
-  --text-h: #16121f;
-  --bg: #f6f5f9;
-  --surface: #ffffff;
-  --surface-2: #fbfafd;
-  --border: #e6e4ea;
-  --code-bg: #f0eef4;
-  --accent: #6d28d9;
-  --accent-2: #9333ea;
-  --accent-bg: rgba(109, 40, 217, 0.08);
-  --accent-border: rgba(109, 40, 217, 0.35);
-  --focus: rgba(109, 40, 217, 0.45);
-  --win: #15803d;
-  --win-bg: rgba(21, 128, 61, 0.1);
-  --loss: #b91c1c;
-  --loss-bg: rgba(185, 28, 28, 0.08);
+  --text: #a59cba;
+  --text-h: #f6f2ff;
+  --bg: #0f0a1a;
+  --bg-deep: #0a0712;
+  --surface: #181127;
+  --surface-2: #1d1530;
+  --border: #2e2445;
+  --code-bg: #231a36;
+  --accent: #a855f7;
+  --accent-2: #c084fc;
+  --accent-bg: rgba(168, 85, 247, 0.16);
+  --accent-border: rgba(168, 85, 247, 0.45);
+  --focus: rgba(192, 132, 252, 0.55);
+  --win: #4ade80;
+  --win-bg: rgba(74, 222, 128, 0.12);
+  --loss: #f87171;
+  --loss-bg: rgba(248, 113, 113, 0.12);
+  --glow-1: rgba(126, 34, 206, 0.42);
+  --glow-2: rgba(79, 70, 229, 0.26);
+  --glow-3: rgba(192, 38, 211, 0.2);
   --shadow:
-    rgba(23, 12, 48, 0.04) 0 1px 2px, rgba(23, 12, 48, 0.06) 0 12px 28px -8px;
-  --shadow-sm: rgba(23, 12, 48, 0.08) 0 1px 2px;
-  --shadow-lift: rgba(23, 12, 48, 0.1) 0 16px 32px -12px;
+    rgba(0, 0, 0, 0.5) 0 1px 2px, rgba(4, 0, 12, 0.55) 0 14px 32px -8px;
+  --shadow-sm: rgba(0, 0, 0, 0.4) 0 1px 2px;
+  --shadow-lift: rgba(4, 0, 12, 0.65) 0 18px 36px -12px;
   --radius: 16px;
   --radius-sm: 9px;
 
@@ -28,38 +34,13 @@
 
   font: 400 15px/1.5 var(--sans);
   letter-spacing: 0;
-  color-scheme: light dark;
+  color-scheme: dark;
   color: var(--text);
-  background: var(--bg);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%) fixed;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9b97a8;
-    --text-h: #f5f3f8;
-    --bg: #0d0c12;
-    --surface: #16151d;
-    --surface-2: #1b1a23;
-    --border: #2a2832;
-    --code-bg: #201f28;
-    --accent: #a855f7;
-    --accent-2: #c084fc;
-    --accent-bg: rgba(168, 85, 247, 0.14);
-    --accent-border: rgba(168, 85, 247, 0.4);
-    --focus: rgba(192, 132, 252, 0.5);
-    --win: #4ade80;
-    --win-bg: rgba(74, 222, 128, 0.12);
-    --loss: #f87171;
-    --loss-bg: rgba(248, 113, 113, 0.1);
-    --shadow:
-      rgba(0, 0, 0, 0.5) 0 1px 2px, rgba(0, 0, 0, 0.45) 0 12px 28px -8px;
-    --shadow-sm: rgba(0, 0, 0, 0.4) 0 1px 2px;
-    --shadow-lift: rgba(0, 0, 0, 0.55) 0 16px 32px -12px;
-  }
 }
 
 * {
@@ -73,6 +54,15 @@
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 #root {

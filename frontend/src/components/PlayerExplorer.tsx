@@ -8,7 +8,9 @@ import {
   type PlayerStats,
   type PlayerSummary,
 } from '../api'
+import { teamTheme } from '../branding'
 import { num, pct, signed } from '../format'
+import { Headshot, TeamLogo } from './Logos'
 import { SeasonPicker } from './SeasonPicker'
 import { Skeleton } from './Skeleton'
 import { Sparkline } from './Sparkline'
@@ -59,7 +61,7 @@ export function PlayerExplorer({ playerId, onSelectPlayer }: PlayerExplorerProps
                 className={p.id === playerId ? 'team-row selected' : 'team-row'}
                 onClick={() => onSelectPlayer(p.id)}
               >
-                <span className="abbr">{p.team_abbreviation}</span>
+                <TeamLogo abbreviation={p.team_abbreviation} size={22} />
                 <span className="player-name">{p.name}</span>
               </button>
             </li>
@@ -117,13 +119,47 @@ function LeadersBoard({
   }, [stat, season])
 
   const statLabel = LEADER_STATS.find((s) => s.key === stat)!.label
+  const shownSeason = season ?? latestSeason
+  const top = !loading ? rows[0] : undefined
 
   return (
     <>
       <div className="detail-head">
         <h3>League leaders</h3>
-        <SeasonPicker season={season ?? latestSeason ?? null} onChange={setSeason} max={latestSeason} />
+        <SeasonPicker season={shownSeason ?? null} onChange={setSeason} max={latestSeason} />
       </div>
+
+      {/* Spotlight on the #1 player, in his team's colors. */}
+      {top ? (
+        <button
+          // Keyed so a failed photo for one player doesn't stick to the next.
+          key={top.player_id}
+          type="button"
+          className="hero hero-player clickable"
+          style={teamTheme(top.team_abbreviation)}
+          onClick={() => onSelectPlayer(top.player_id)}
+        >
+          <TeamLogo abbreviation={top.team_abbreviation} size={240} className="hero-watermark" />
+          <Headshot playerId={top.player_id} name={top.name} shape="portrait" size={120} className="hero-photo" />
+          <div className="hero-text">
+            <span className="hero-kicker">
+              {shownSeason != null && `${shownSeason}-${String(shownSeason + 1).slice(-2)} `}
+              {statLabel} leader
+            </span>
+            <h3>{top.name}</h3>
+            <span className="hero-sub">
+              {top.team_abbreviation} &middot; {top.games_played} games
+            </span>
+          </div>
+          <div className="hero-figure">
+            <span className="hero-number">{num(top.value)}</span>
+            <span className="hero-unit">{statLabel} / game</span>
+          </div>
+        </button>
+      ) : (
+        <Skeleton height={136} className="skeleton-rounded hero-skeleton" />
+      )}
+
       <div className="chip-row">
         {LEADER_STATS.map((s) => (
           <button
@@ -160,8 +196,18 @@ function LeadersBoard({
               : rows.map((r) => (
                   <tr key={r.player_id} className={r.rank === 1 ? 'clickable leader' : 'clickable'} onClick={() => onSelectPlayer(r.player_id)}>
                     <td className="rank-cell">{r.rank}</td>
-                    <td className="name-cell">{r.name}</td>
-                    <td>{r.team_abbreviation}</td>
+                    <td className="name-cell">
+                      <span className="person">
+                        <Headshot playerId={r.player_id} name={r.name} />
+                        {r.name}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="team-inline">
+                        <TeamLogo abbreviation={r.team_abbreviation} size={18} />
+                        {r.team_abbreviation}
+                      </span>
+                    </td>
                     <td>{r.games_played}</td>
                     <td className="strong">{num(r.value)}</td>
                   </tr>
@@ -194,26 +240,50 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
 
   const a = stats?.averages
   const log = stats ? [...stats.game_log].reverse() : []
+  // Colors follow the team he finished the season with.
+  const currentTeam = stats?.teams[stats.teams.length - 1]
 
   return (
-    <>
+    <div className="themed" style={teamTheme(currentTeam)}>
       <button type="button" className="back-link" onClick={onBack}>
         &larr; League leaders
       </button>
 
-      <div className="detail-head">
-        <div>
-          <h3>{stats?.name ?? <Skeleton width={180} height={20} />}</h3>
-          {stats && <span className="hint-inline">{stats.teams.join(' → ')}{stats.teams.length > 1 && ' (traded mid-season)'}</span>}
+      <div className="hero hero-player" style={teamTheme(currentTeam)}>
+        {currentTeam && <TeamLogo abbreviation={currentTeam} size={240} className="hero-watermark" />}
+        <Headshot playerId={playerId} name={stats?.name ?? ''} shape="portrait" size={120} className="hero-photo" />
+        <div className="hero-text">
+          {stats ? (
+            <>
+              <span className="hero-kicker">
+                {stats.season}-{String(stats.season + 1).slice(-2)} season
+                {stats.teams.length > 1 && ' · traded mid-season'}
+              </span>
+              <h3>{stats.name}</h3>
+              <span className="hero-teams">
+                {stats.teams.map((t, i) => (
+                  <span key={t} className="team-inline">
+                    {i > 0 && <span className="hero-arrow">&rarr;</span>}
+                    <TeamLogo abbreviation={t} size={22} />
+                    {t}
+                  </span>
+                ))}
+              </span>
+            </>
+          ) : (
+            <Skeleton width={180} height={22} />
+          )}
         </div>
         {stats && stats.seasons.length > 1 && (
-          <select className="season-select" value={stats.season} onChange={(e) => setSeason(Number(e.target.value))}>
-            {[...stats.seasons].reverse().map((s) => (
-              <option key={s} value={s}>
-                {s}-{String(s + 1).slice(-2)}
-              </option>
-            ))}
-          </select>
+          <div className="hero-actions">
+            <select className="season-select" value={stats.season} onChange={(e) => setSeason(Number(e.target.value))}>
+              {[...stats.seasons].reverse().map((s) => (
+                <option key={s} value={s}>
+                  {s}-{String(s + 1).slice(-2)}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
@@ -275,7 +345,13 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
                   {log.map((g) => (
                     <tr key={g.date}>
                       <td>{g.date.slice(5)}</td>
-                      <td className="name-cell">{g.is_home ? 'vs' : '@'} {g.opponent_abbreviation}</td>
+                      <td className="name-cell">
+                        <span className="team-inline">
+                          <span className="opp-prefix">{g.is_home ? 'vs' : '@'}</span>
+                          <TeamLogo abbreviation={g.opponent_abbreviation} size={18} />
+                          {g.opponent_abbreviation}
+                        </span>
+                      </td>
                       <td>
                         <span className={`badge small ${g.win ? 'win' : 'loss'}`}>{g.win ? 'W' : 'L'}</span>
                       </td>
@@ -294,7 +370,7 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
           </section>
         </>
       )}
-    </>
+    </div>
   )
 }
 
