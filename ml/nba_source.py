@@ -1,6 +1,7 @@
 """Loads the stats.nba.com team game logs (data/raw/nba/) into the team-centric
 "long" table every downstream step works from: one row per (team, game), with
 the opponent's box score joined on and per-game advanced stats derived.
+Raw rows come from raw_store (Supabase if configured, else parquet).
 
 Shared by ml/prepare_features.py and the backend, same as team_form.py.
 """
@@ -11,16 +12,17 @@ from pathlib import Path
 
 import pandas as pd
 
+import raw_store
+
 BOX_COLS = ["pts", "fgm", "fga", "fg3m", "ftm", "fta", "oreb", "dreb", "reb", "ast", "stl", "blk", "tov", "pf"]
 
 
 def load_teams(raw_dir: Path) -> pd.DataFrame:
-    return pd.read_parquet(raw_dir / "teams.parquet").sort_values("full_name").reset_index(drop=True)
+    return raw_store.read("teams", raw_dir).sort_values("full_name").reset_index(drop=True)
 
 
 def load_team_games(raw_dir: Path) -> pd.DataFrame:
-    frames = [pd.read_parquet(f) for f in sorted(raw_dir.glob("team_games_*.parquet"))]
-    df = pd.concat(frames, ignore_index=True).rename(columns=str.lower)
+    df = raw_store.read("team_games", raw_dir)
 
     opp = df[["game_id", "team_id", *BOX_COLS]].rename(
         columns={"team_id": "opponent_id", **{c: f"opp_{c}" for c in BOX_COLS}}
@@ -39,8 +41,7 @@ def load_team_games(raw_dir: Path) -> pd.DataFrame:
 def load_player_games(raw_dir: Path) -> pd.DataFrame:
     """Player game logs for players who actually got on the court, with a
     per-game Hollinger Game Score - a one-number box-score summary of a game."""
-    frames = [pd.read_parquet(f) for f in sorted(raw_dir.glob("player_games_*.parquet"))]
-    pg = pd.concat(frames, ignore_index=True).rename(columns=str.lower).rename(columns={"game_date": "date"})
+    pg = raw_store.read("player_games", raw_dir).rename(columns={"game_date": "date"})
     pg = pg[pg["min"] > 0].copy()
     pg["game_score"] = (
         pg["pts"] + 0.4 * pg["fgm"] - 0.7 * pg["fga"] - 0.4 * (pg["fta"] - pg["ftm"])

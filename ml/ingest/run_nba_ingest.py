@@ -18,6 +18,8 @@ import pandas as pd
 from nba_api.stats.endpoints import leaguegamelog, leaguestandingsv3
 from nba_api.stats.static import teams as static_teams
 
+import raw_store
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_RAW_NBA = REPO_ROOT / "data" / "raw" / "nba"
 
@@ -61,6 +63,9 @@ def fetch_game_logs(start_year: int, kind: str) -> pd.DataFrame:
             continue
         df["POSTSEASON"] = is_postseason
         frames.append(df)
+    if not frames:
+        # Season hasn't started yet (or no games logged so far).
+        return pd.DataFrame()
     out = pd.concat(frames, ignore_index=True)
     out["SEASON"] = start_year
     out["IS_HOME"] = out["MATCHUP"].str.contains("vs.", regex=False)
@@ -72,10 +77,14 @@ def fetch_game_logs(start_year: int, kind: str) -> pd.DataFrame:
     return out
 
 
-def save(df: pd.DataFrame, path: Path) -> None:
+def save(df: pd.DataFrame, path: Path, kind: str) -> None:
+    """Write the local parquet copy, and upsert into Supabase when configured."""
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=False)
     print(f"  wrote {len(df)} rows -> {path.relative_to(REPO_ROOT)}")
+    if raw_store.using_database():
+        raw_store.upsert(kind, df)
+        print(f"  upserted {len(df)} rows -> database table {kind}")
 
 
 def save_teams(latest_season: int) -> None:
@@ -87,7 +96,7 @@ def save_teams(latest_season: int) -> None:
         columns={"TeamID": "id", "Conference": "conference", "Division": "division"}
     )
     teams = static[["id", "city", "name", "full_name", "abbreviation"]].merge(conf, on="id", how="left")
-    save(teams, DATA_RAW_NBA / "teams.parquet")
+    save(teams, DATA_RAW_NBA / "teams.parquet", "teams")
 
 
 def main() -> None:
@@ -103,7 +112,11 @@ def main() -> None:
                 print(f"{name} {season}: already exists, skipping (use --overwrite to refetch)")
                 continue
             print(f"{name} {season} ({season_label(season)}): fetching...")
-            save(fetch_game_logs(season, kind), out)
+            df = fetch_game_logs(season, kind)
+            if df.empty:
+                print("  no games yet, skipping")
+                continue
+            save(df, out, name)
 
     print("teams: fetching conference/division from latest season standings...")
     save_teams(max(args.seasons))
