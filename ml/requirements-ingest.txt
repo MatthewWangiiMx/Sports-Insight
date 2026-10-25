@@ -1,0 +1,7 @@
+# Just what the daily update (python -m ingest.update) needs - used by the
+# GitHub Actions workflow, where installing the full ml/requirements.txt
+# (scikit-learn, xgboost, jupyter, ...) would only slow every run down.
+pandas>=3.0
+nba_api>=1.11
+psycopg[binary]>=3.2
+python-dotenv>=1.1

@@ -1,0 +1,48 @@
+# Pulls the current NBA season from stats.nba.com into Supabase every morning.
+# stats.nba.com blocks cloud servers like GitHub's, so requests go through the
+# residential proxy in the NBA_PROXY secret. Needs two repository secrets
+# (Settings -> Secrets and variables -> Actions): DATABASE_URL and NBA_PROXY.
+
+name: Daily NBA data update
+
+on:
+  schedule:
+    # 12:00 UTC = 8am Eastern in summer, 7am in winter - after the previous
+    # night's games are final. GitHub may start scheduled runs a little late.
+    - cron: "0 12 * * *"
+  # Adds a "Run workflow" button on the Actions tab for manual runs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two updates at once (e.g. a manual run during the scheduled one).
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: ml/requirements-ingest.txt
+
+      - name: Install dependencies
+        run: pip install -r ml/requirements-ingest.txt
+
+      - name: Pull current season into Supabase
+        working-directory: ml
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NBA_PROXY: ${{ secrets.NBA_PROXY }}
+          # The runner is discarded after each run; Supabase is the copy that matters.
+          WRITE_PARQUET: "0"
+          PYTHONUTF8: "1"
+        run: python -m ingest.update

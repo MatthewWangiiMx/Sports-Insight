@@ -11,6 +11,7 @@ Usage (from ml/, with .venv active):
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from pathlib import Path
 
@@ -35,14 +36,34 @@ def season_label(start_year: int) -> str:
     return f"{start_year}-{str(start_year + 1)[-2:]}"
 
 
+def nba_proxy() -> str | None:
+    """Optional NBA_PROXY (http://user:pass@host:port). stats.nba.com blocks
+    cloud servers, so runs from GitHub Actions route through a residential
+    proxy; runs from home work with or without it."""
+    raw_store.load_env()
+    return os.getenv("NBA_PROXY", "").strip().strip("'\"") or None
+
+
+def write_parquet() -> bool:
+    """Local parquet backup - on by default, off in CI (WRITE_PARQUET=0),
+    where the machine is thrown away after each run anyway."""
+    raw_store.load_env()
+    return os.getenv("WRITE_PARQUET", "1") != "0"
+
+
 def fetch(endpoint_cls, **kwargs) -> pd.DataFrame:
+    proxy = nba_proxy()
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             time.sleep(REQUEST_PAUSE_SECONDS)
-            return endpoint_cls(timeout=60, **kwargs).get_data_frames()[0]
+            return endpoint_cls(timeout=60, proxy=proxy, **kwargs).get_data_frames()[0]
         except Exception as exc:
             if attempt == MAX_ATTEMPTS:
-                raise
+                # Only the error type: request errors can echo the proxy URL,
+                # credentials included, and this ends up in logs.
+                raise RuntimeError(
+                    f"{endpoint_cls.__name__} failed after {MAX_ATTEMPTS} attempts ({exc.__class__.__name__})"
+                ) from None
             wait = 5 * attempt
             print(f"  request failed ({exc.__class__.__name__}), retrying in {wait}s...")
             time.sleep(wait)
@@ -78,10 +99,11 @@ def fetch_game_logs(start_year: int, kind: str) -> pd.DataFrame:
 
 
 def save(df: pd.DataFrame, path: Path, kind: str) -> None:
-    """Write the local parquet copy, and upsert into Supabase when configured."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False)
-    print(f"  wrote {len(df)} rows -> {path.relative_to(REPO_ROOT)}")
+    """Write the local parquet copy (unless disabled), and upsert into Supabase when configured."""
+    if write_parquet():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(path, index=False)
+        print(f"  wrote {len(df)} rows -> {path.relative_to(REPO_ROOT)}")
     if raw_store.using_database():
         raw_store.upsert(kind, df)
         print(f"  upserted {len(df)} rows -> database table {kind}")
