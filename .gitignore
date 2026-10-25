@@ -27,3 +27,6 @@ ml/models/*
 # Editor / OS
 .vscode/
 .DS_Store
+
+# Daily update logs
+logs/

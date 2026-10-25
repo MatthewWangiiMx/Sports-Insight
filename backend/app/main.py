@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,14 @@ from .schemas import (
     TeamSeasonStats,
 )
 
-app = FastAPI(title="Sports Insight API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Picks up new games (e.g. from the daily ingest) without a restart.
+    data.start_auto_refresh()
+    yield
+
+
+app = FastAPI(title="Sports Insight API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +41,12 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "source": "database" if data.raw_store.using_database() else "parquet",
+        "latest_game_date": str(data.LATEST_GAME_DATE.date()),
+        "data_loaded_at": data.LOADED_AT.isoformat(timespec="seconds"),
+    }
 
 
 @app.get("/teams", response_model=list[TeamOut])
@@ -142,4 +156,5 @@ def predict_winprob(req: PredictRequest) -> dict:
         "season": result["season"],
         "model_version": result["model_version"],
         "factors": result["factors"],
+        "note": result["note"],
     }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .data import PLAYER_GAMES
+from . import data
 
 # Stats that can be ranked on the leaders board, and their display labels.
 LEADER_STATS = {
@@ -25,16 +25,28 @@ LEADER_STATS = {
 # appear on a leaders board - stops a 3-game cameo from topping the list.
 LEADER_MIN_GAMES_SHARE = 0.5
 
-_REGULAR = PLAYER_GAMES[~PLAYER_GAMES["postseason"]]
+_REGULAR: pd.DataFrame
+_PLAYER_INDEX: pd.DataFrame
 
-# One row per player: name, plus team and season from their most recent game.
-_PLAYER_INDEX = (
-    PLAYER_GAMES.sort_values("date")
-    .groupby("player_id")
-    .tail(1)[["player_id", "player_name", "team_abbreviation", "season"]]
-    .rename(columns={"player_id": "id", "player_name": "name", "season": "last_season"})
-    .sort_values(["last_season", "name"], ascending=[False, True])
-)
+
+@data.on_reload
+def _rebuild() -> None:
+    """Derived tables, recomputed whenever data.py loads new games."""
+    global _REGULAR, _PLAYER_INDEX
+    pg = data.PLAYER_GAMES
+    regular = pg[~pg["postseason"]]
+    # One row per player: name, plus team and season from their most recent game.
+    index = (
+        pg.sort_values("date")
+        .groupby("player_id")
+        .tail(1)[["player_id", "player_name", "team_abbreviation", "season"]]
+        .rename(columns={"player_id": "id", "player_name": "name", "season": "last_season"})
+        .sort_values(["last_season", "name"], ascending=[False, True])
+    )
+    _REGULAR, _PLAYER_INDEX = regular, index
+
+
+_rebuild()
 
 
 def list_players() -> list[dict]:

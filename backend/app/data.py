@@ -1,13 +1,19 @@
-"""Loads teams/games from data/raw/nba/ once at process start and keeps them in memory.
+"""Loads teams/games (Supabase, or data/raw/nba/ parquet) into memory and keeps
+them there.
 
-At our data volume (~13k games) this is simpler and faster than hitting disk
-or the upstream API per request, and it *is* the caching layer for now -
-refreshing means re-running ml/ingest/run_nba_ingest and restarting the API.
+At our data volume (~13k games) this is simpler and faster than querying per
+request. A background thread (start_auto_refresh) checks every few minutes
+whether the stored data changed - e.g. after the daily ingest - and if so
+reloads and swaps everything in at once, so new games show up without a restart.
 """
 
 from __future__ import annotations
 
+import os
 import sys
+import threading
+import time
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,14 +27,79 @@ ML_DIR = REPO_ROOT / "ml"
 if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
+import raw_store  # noqa: E402
 from nba_source import load_player_games, load_team_games, load_teams  # noqa: E402
 from ratings import add_ratings  # noqa: E402
 
-TEAMS = load_teams(DATA_RAW_NBA)
-PLAYER_GAMES = load_player_games(DATA_RAW_NBA)
-TEAM_GAMES_LONG = add_ratings(load_team_games(DATA_RAW_NBA), PLAYER_GAMES)
-LATEST_GAME_DATE: pd.Timestamp = TEAM_GAMES_LONG["date"].max()
-LATEST_SEASON = int(TEAM_GAMES_LONG["season"].max())
+# How often the auto-refresh thread checks for new data, in seconds.
+REFRESH_INTERVAL_SECONDS = int(os.getenv("DATA_REFRESH_SECONDS", "300"))
+
+# Filled in by reload(). Module globals rather than a passed-around object so
+# every function below always reads the latest snapshot.
+TEAMS: pd.DataFrame
+PLAYER_GAMES: pd.DataFrame
+TEAM_GAMES_LONG: pd.DataFrame
+LATEST_GAME_DATE: pd.Timestamp
+LATEST_SEASON: int
+DATA_VERSION: str = ""
+LOADED_AT: pd.Timestamp
+# Bumped on every reload; part of the league_advanced cache key so an old
+# season table can't be served after new games arrive.
+_GENERATION = 0
+_reload_listeners: list[Callable[[], None]] = []
+_reload_lock = threading.Lock()
+
+
+def _current_version() -> str:
+    try:
+        return raw_store.data_version(DATA_RAW_NBA)
+    except Exception as exc:  # database unreachable - force a reload once it's back
+        print(f"[data] couldn't check data version ({exc.__class__.__name__}); will retry")
+        return "unavailable"
+
+
+def reload() -> None:
+    """Load everything, then swap it in. Building first and assigning after
+    means requests never see a half-loaded mix of old and new tables."""
+    global TEAMS, PLAYER_GAMES, TEAM_GAMES_LONG, LATEST_GAME_DATE, LATEST_SEASON
+    global DATA_VERSION, LOADED_AT, _GENERATION
+    with _reload_lock:
+        version = _current_version()  # taken before reading, so a change mid-read is caught next check
+        teams = load_teams(DATA_RAW_NBA)
+        player_games = load_player_games(DATA_RAW_NBA)
+        team_games_long = add_ratings(load_team_games(DATA_RAW_NBA), player_games)
+
+        TEAMS, PLAYER_GAMES, TEAM_GAMES_LONG = teams, player_games, team_games_long
+        LATEST_GAME_DATE = team_games_long["date"].max()
+        LATEST_SEASON = int(team_games_long["season"].max())
+        DATA_VERSION, LOADED_AT = version, pd.Timestamp.now()
+        _GENERATION += 1
+        for listener in _reload_listeners:
+            listener()
+
+
+def on_reload(listener: Callable[[], None]) -> Callable[[], None]:
+    """Register something (e.g. players.py's derived tables) to rebuild after each reload."""
+    _reload_listeners.append(listener)
+    return listener
+
+
+def start_auto_refresh() -> None:
+    def loop() -> None:
+        while True:
+            time.sleep(REFRESH_INTERVAL_SECONDS)
+            try:
+                if _current_version() not in (DATA_VERSION, "unavailable"):
+                    started = time.perf_counter()
+                    reload()
+                    print(f"[data] reloaded in {time.perf_counter() - started:.1f}s; latest game {LATEST_GAME_DATE.date()}")
+            except Exception as exc:  # keep serving the old data rather than kill the thread
+                print(f"[data] auto-refresh failed: {exc.__class__.__name__}: {exc}")
+
+    threading.Thread(target=loop, name="data-auto-refresh", daemon=True).start()
+
+
+reload()
 
 # Season-level advanced stats shown on the team page, and whether a higher value
 # is better (for league ranking). Pace has no "better" - rank 1 = fastest.
@@ -47,8 +118,12 @@ ADVANCED_STATS = {
 }
 
 
-@lru_cache(maxsize=None)
 def league_advanced(season: int) -> pd.DataFrame:
+    return _league_advanced(season, _GENERATION)
+
+
+@lru_cache(maxsize=64)
+def _league_advanced(season: int, generation: int) -> pd.DataFrame:
     """Every team's regular-season advanced stats plus league ranks, indexed by
     team_id. Rates come from season *totals* (e.g. total points / total
     possessions), not the average of per-game rates, which would let a

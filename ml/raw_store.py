@@ -66,15 +66,22 @@ create index if not exists player_games_season_idx on player_games (season);
 
 
 @lru_cache(maxsize=1)
+def load_env() -> None:
+    """Read backend/.env into the environment. Variables already set (e.g.
+    GitHub Actions secrets) win over the file."""
+    from dotenv import load_dotenv
+
+    load_dotenv(ENV_FILE)
+
+
+@lru_cache(maxsize=1)
 def _conninfo() -> dict | None:
     """Connection settings from DATABASE_URL, or None to use parquet.
 
     The URL is split by hand instead of with a URL parser so a password
     containing '@', '#' or '%' works without having to percent-encode it.
     """
-    from dotenv import load_dotenv
-
-    load_dotenv(ENV_FILE)
+    load_env()
     if os.getenv("DATA_SOURCE", "").lower() == "parquet":
         return None
     url = os.getenv("DATABASE_URL", "").strip().strip("'\"")
@@ -202,6 +209,16 @@ def read(kind: str, raw_dir: Path) -> pd.DataFrame:
         except Exception as exc:  # network down, project paused, ...
             print(f"[raw_store] database read failed ({exc.__class__.__name__}: {exc}); using parquet")
     return _read_parquet(raw_dir, kind)
+
+
+def data_version(raw_dir: Path) -> str:
+    """Changes whenever any stored data does - lets a long-running process (the
+    backend) notice new data cheaply, without re-downloading anything."""
+    if using_database():
+        with connect() as conn:
+            return ";".join(_fingerprint(conn, TABLES[k][0]) for k in TABLES)
+    files = sorted(raw_dir.glob("*.parquet"))
+    return ";".join(f"{f.name}:{f.stat().st_mtime_ns}:{f.stat().st_size}" for f in files)
 
 
 def latest_game_date() -> pd.Timestamp | None:
