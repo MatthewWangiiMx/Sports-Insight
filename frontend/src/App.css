@@ -1534,3 +1534,26 @@ button.hero:hover {
     display: none;
   }
 }
+
+/* Shown under the probability bar when the prediction isn't from the full model. */
+.note-callout {
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.note-callout svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent-2);
+}

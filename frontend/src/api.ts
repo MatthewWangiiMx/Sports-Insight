@@ -95,6 +95,8 @@ export interface PredictResponse {
   season: number
   model_version: string
   factors: PredictionFactor[]
+  // Set when the prediction isn't from the full model (early-season Elo fallback).
+  note: string | null
 }
 
 export interface PlayerSummary {

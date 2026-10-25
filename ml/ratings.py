@@ -34,6 +34,14 @@ def carry_over(elo: float) -> float:
     return ELO_CARRYOVER * elo + (1 - ELO_CARRYOVER) * ELO_MEAN
 
 
+def elo_win_probability(home_elo: float, away_elo: float, neutral_site: bool = False) -> float:
+    """Elo's own prediction: the home team's chance to win, from the rating gap
+    plus home-court advantage. Used to update ratings below, and on its own as
+    the early-season fallback when the model lacks this season's form data."""
+    edge = 0 if neutral_site else ELO_HOME_ADVANTAGE
+    return 1 / (1 + 10 ** (-(home_elo + edge - away_elo) / 400))
+
+
 def add_ratings(long_df: pd.DataFrame, player_games: pd.DataFrame) -> pd.DataFrame:
     long_df = long_df.merge(_elo_history(long_df), on=["game_id", "team_id"], how="left")
     long_df = long_df.merge(_roster_after(player_games), on=["game_id", "team_id"], how="left")
@@ -66,7 +74,7 @@ def _elo_history(long_df: pd.DataFrame) -> pd.DataFrame:
 
         home, away = rating[g.team_id], rating[g.opponent_id]
         edge = 0 if g.neutral_site else ELO_HOME_ADVANTAGE
-        expected_home = 1 / (1 + 10 ** (-(home + edge - away) / 400))
+        expected_home = elo_win_probability(home, away, g.neutral_site)
         home_won = g.team_score > g.opp_score
 
         # Margin-of-victory multiplier: bigger wins move ratings more, damped when

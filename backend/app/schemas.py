@@ -90,6 +90,8 @@ class PredictResponse(BaseModel):
     season: int
     model_version: str
     factors: list[PredictionFactor]
+    # Set when the prediction isn't from the full model (e.g. early-season Elo fallback).
+    note: str | None = None
 
 
 class PlayerSummary(BaseModel):

@@ -135,6 +135,21 @@ def add_matchup_features(row):
     return row
 
 
+def elo_as_of(team_games: pd.DataFrame, as_of: pd.Timestamp) -> float | None:
+    """Team's Elo entering a game on `as_of`: the rating after its last game,
+    pulled toward the mean if that game was in an earlier season. None if the
+    team has no games before `as_of` at all. Needs only one prior game ever,
+    so it works from opening night - unlike the full form snapshot below."""
+    prior_games = team_games[team_games["date"] < as_of]
+    if prior_games.empty:
+        return None
+    last_game = prior_games.loc[prior_games["date"].idxmax()]
+    elo = float(last_game["elo_post"])
+    if int(last_game["season"]) != resolve_season(team_games, as_of):
+        elo = carry_over(elo)
+    return elo
+
+
 def team_form_as_of(team_games: pd.DataFrame, as_of: pd.Timestamp, min_prior_games: int = MIN_PRIOR_GAMES) -> dict | None:
     """Pre-game feature snapshot for one team entering a new game on `as_of`.
 
@@ -157,9 +172,7 @@ def team_form_as_of(team_games: pd.DataFrame, as_of: pd.Timestamp, min_prior_gam
 
     # Ratings as they stand after the team's most recent game - exactly what the
     # training table's pre-game "elo" / "roster_strength" would be for a next game.
-    elo = float(last_game["elo_post"])
-    if int(last_game["season"]) != season:
-        elo = carry_over(elo)
+    elo = elo_as_of(team_games, as_of)
 
     features = {
         "games_played_season": int(len(season_games)),

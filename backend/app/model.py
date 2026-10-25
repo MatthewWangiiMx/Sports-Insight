@@ -18,9 +18,12 @@ from .data import ML_DIR, REPO_ROOT, team_games
 if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
-from team_form import add_matchup_features, resolve_season, team_form_as_of  # noqa: E402
+from ratings import elo_win_probability  # noqa: E402
+from team_form import MIN_PRIOR_GAMES, add_matchup_features, elo_as_of, resolve_season, team_form_as_of  # noqa: E402
 
 MODEL_VERSION = "winprob_v3"
+# Reported instead of MODEL_VERSION when the early-season Elo fallback is used.
+ELO_FALLBACK_VERSION = "elo_early_season"
 MODEL_PATH = ML_DIR / "models" / f"{MODEL_VERSION}.pkl"
 
 TOP_FACTOR_COUNT = 5
@@ -102,11 +105,16 @@ def predict_home_win_probability(
     as_of: pd.Timestamp,
     postseason: bool = False,
 ) -> dict:
+    try:
+        home = _team_features(home_team_id, as_of)
+        away = _team_features(away_team_id, as_of)
+    except InsufficientHistoryError:
+        # Start of a season: the model's form features (last 5/10 games, season
+        # win %) need a few games this season, but Elo carries over from last season.
+        return _elo_estimate(home_team_id, away_team_id, as_of)
+
     if _BUNDLE is None:
         raise ModelNotTrainedError(f"no model found at {MODEL_PATH.relative_to(REPO_ROOT)}; run ml/train.py first")
-
-    home = _team_features(home_team_id, as_of)
-    away = _team_features(away_team_id, as_of)
 
     row = {"postseason": int(postseason)}
     for key, value in home.items():
@@ -130,6 +138,40 @@ def predict_home_win_probability(
         "away_form": away,
         "model_version": MODEL_VERSION,
         "factors": factors,
+        "note": None,
+    }
+
+
+def _elo_estimate(home_team_id: int, away_team_id: int, as_of: pd.Timestamp) -> dict:
+    """Win probability from Elo alone - the fallback until both teams have
+    MIN_PRIOR_GAMES games this season. Less informed than the model (no recent
+    form, rest or roster), but Elo was the model's strongest single feature."""
+    home_games, away_games = team_games(home_team_id), team_games(away_team_id)
+    home_elo, away_elo = elo_as_of(home_games, as_of), elo_as_of(away_games, as_of)
+    season = resolve_season(home_games, as_of)
+    if home_elo is None:
+        raise InsufficientHistoryError(home_team_id, season)
+    if away_elo is None:
+        raise InsufficientHistoryError(away_team_id, season)
+
+    p = elo_win_probability(home_elo, away_elo)
+    # Split the edge into its two parts: home court alone (equal ratings), and
+    # what the rating gap adds or takes away on top of that.
+    p_home_court = elo_win_probability(home_elo, home_elo)
+    factors = [
+        {"label": "Elo rating edge", "favors": "home" if home_elo >= away_elo else "away", "impact_pct": abs(p - p_home_court) * 100},
+        {"label": "Home court advantage", "favors": "home", "impact_pct": (p_home_court - 0.5) * 100},
+    ]
+    return {
+        "home_win_probability": p,
+        "away_win_probability": 1.0 - p,
+        "season": season,
+        "model_version": ELO_FALLBACK_VERSION,
+        "factors": sorted(factors, key=lambda f: f["impact_pct"], reverse=True),
+        "note": (
+            f"Early-season estimate: the full model needs {MIN_PRIOR_GAMES} games from each team this season, "
+            "so this uses Elo ratings alone (carried over from last season, updated after every game)."
+        ),
     }
 
 

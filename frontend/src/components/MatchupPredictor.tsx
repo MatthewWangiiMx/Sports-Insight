@@ -11,6 +11,15 @@ import { teamTheme } from '../branding'
 import { TeamLogo } from './Logos'
 import { Skeleton } from './Skeleton'
 
+function InfoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M8 7.2v4M8 4.8v.1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function MatchupPredictor() {
   const [teams, setTeams] = useState<Team[]>([])
   const [homeId, setHomeId] = useState<number | ''>('')
@@ -170,6 +179,12 @@ export function MatchupPredictor() {
                 `${result.away_team.abbreviation} ${(result.away_win_probability * 100).toFixed(1)}%`}
             </div>
           </div>
+          {result.note && (
+            <p className="note-callout">
+              <InfoIcon />
+              {result.note}
+            </p>
+          )}
           <p className="meta">
             Season {result.season} &middot; as of {result.as_of_date} &middot; model{' '}
             {result.model_version}
