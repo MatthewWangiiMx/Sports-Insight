@@ -21,7 +21,8 @@ import pandas as pd
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
-DATA_RAW_NBA = REPO_ROOT / "data" / "raw" / "nba"
+# Overridable so tests can point the API at a small generated league instead.
+DATA_RAW_NBA = Path(os.getenv("NBA_RAW_DIR") or REPO_ROOT / "data" / "raw" / "nba")
 
 ML_DIR = REPO_ROOT / "ml"
 if str(ML_DIR) not in sys.path:

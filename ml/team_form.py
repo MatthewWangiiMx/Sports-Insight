@@ -6,8 +6,6 @@ too, to compute a live "current form" snapshot for a hypothetical matchup -
 using the same functions in both places means the API can never silently
 drift from what the model was actually trained on.
 
-Input is the team-centric long table from nba_source.load_team_games.
-
 Input is the team-centric long table from nba_source.load_team_games, with
 ratings.add_ratings already applied (elo / roster_strength columns).
 """

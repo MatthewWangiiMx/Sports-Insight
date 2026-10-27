@@ -1,0 +1,6 @@
+# Everything the test suite needs (pytest from the repo root). Used by CI.
+-r backend/requirements.txt
+nba_api>=1.11
+pytest>=8.3
+# Starlette's TestClient prefers httpx2 (plain httpx is deprecated for it).
+httpx2>=2.16

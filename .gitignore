@@ -16,6 +16,10 @@ data/processed/*
 !data/processed/.gitkeep
 ml/models/*
 !ml/models/.gitkeep
+# The model the API serves is tiny (~2 KB) and versioned with the code that
+# loads it, so tests and deployments get exactly the model the code expects.
+!ml/models/winprob_v3.pkl
+!ml/models/winprob_v3_metrics.json
 
 # Notebooks checkpoints
 .ipynb_checkpoints/
