@@ -49,12 +49,21 @@ def test_players_who_never_played_are_dropped(raw_dir):
 
 
 def test_game_score_formula(raw_dir):
-    r = load_player_games(raw_dir).iloc[0]
+    loaded = load_player_games(raw_dir).iloc[0]
+    # oreb/dreb/pf aren't kept after loading, so check against the raw row.
+    raw = pd.read_parquet(raw_dir / "player_games_2023.parquet").rename(columns=str.lower)
+    r = raw[(raw["game_id"] == loaded.game_id) & (raw["player_id"] == loaded.player_id)].iloc[0]
     expected = (
         r.pts + 0.4 * r.fgm - 0.7 * r.fga - 0.4 * (r.fta - r.ftm) + 0.7 * r.oreb + 0.3 * r.dreb
         + r.stl + 0.7 * r.ast + 0.7 * r.blk - 0.4 * r.pf - r.tov
     )
-    assert r.game_score == pytest.approx(expected)
+    assert loaded.game_score == pytest.approx(expected)
+
+
+def test_player_table_keeps_only_used_columns(raw_dir):
+    from nba_source import PLAYER_COLUMNS
+
+    assert list(load_player_games(raw_dir).columns) == PLAYER_COLUMNS
 
 
 def test_teams_sorted_by_name(raw_dir):

@@ -9,6 +9,8 @@ reloads and swaps everything in at once, so new games show up without a restart.
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import os
 import sys
 import threading
@@ -77,6 +79,20 @@ def reload() -> None:
         _GENERATION += 1
         for listener in _reload_listeners:
             listener()
+    _release_freed_memory()
+
+
+def _release_freed_memory() -> None:
+    """After a reload the old tables are garbage; on Linux, glibc keeps freed
+    memory reserved for the process unless asked to hand it back. Without this
+    the server's footprint ratchets up with every reload - which matters on a
+    512 MB host."""
+    gc.collect()
+    if sys.platform.startswith("linux"):
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except OSError:  # not glibc (e.g. Alpine/musl) - nothing to trim
+            pass
 
 
 def on_reload(listener: Callable[[], None]) -> Callable[[], None]:

@@ -14,6 +14,20 @@ import pandas as pd
 
 import raw_store
 
+# Player-log columns anything downstream reads (ratings, the API's player pages).
+# The rest (team name, the percentage columns, fantasy points, ...) are dropped
+# at load - the table has ~275k rows and lives in the API's memory.
+PLAYER_COLUMNS = [
+    "player_id", "player_name", "team_id", "team_abbreviation", "game_id", "date", "matchup", "wl",
+    "season", "postseason", "is_home", "game_score", "plus_minus",
+    "min", "pts", "reb", "ast", "stl", "blk", "tov", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta",
+]
+# Text repeated across many rows: stored once per distinct value as a category.
+_CATEGORY_COLUMNS = ["player_name", "team_abbreviation", "matchup", "wl"]
+_SMALL_INT_COLUMNS = ["season", "plus_minus", "min", "pts", "reb", "ast", "stl", "blk", "tov",
+                      "fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "oreb", "dreb", "pf"]
+_PLAYER_DTYPES = {c: "category" for c in _CATEGORY_COLUMNS} | {c: "int16" for c in _SMALL_INT_COLUMNS}
+
 BOX_COLS = ["pts", "fgm", "fga", "fg3m", "ftm", "fta", "oreb", "dreb", "reb", "ast", "stl", "blk", "tov", "pf"]
 
 
@@ -41,13 +55,16 @@ def load_team_games(raw_dir: Path) -> pd.DataFrame:
 def load_player_games(raw_dir: Path) -> pd.DataFrame:
     """Player game logs for players who actually got on the court, with a
     per-game Hollinger Game Score - a one-number box-score summary of a game."""
-    pg = raw_store.read("player_games", raw_dir).rename(columns={"game_date": "date"})
-    pg = pg[pg["min"] > 0].copy()
+    # Read just what Game Score and PLAYER_COLUMNS need, not all ~37 columns.
+    raw_columns = [c for c in PLAYER_COLUMNS if c not in ("date", "game_score")] + ["game_date", "oreb", "dreb", "pf"]
+    pg = raw_store.read("player_games", raw_dir, raw_columns, _PLAYER_DTYPES).rename(columns={"game_date": "date"})
+    pg = pg[pg["min"] > 0]
     pg["game_score"] = (
         pg["pts"] + 0.4 * pg["fgm"] - 0.7 * pg["fga"] - 0.4 * (pg["fta"] - pg["ftm"])
         + 0.7 * pg["oreb"] + 0.3 * pg["dreb"] + pg["stl"] + 0.7 * pg["ast"] + 0.7 * pg["blk"]
         - 0.4 * pg["pf"] - pg["tov"]
     )
+    pg = pg[PLAYER_COLUMNS]
     return pg.sort_values(["player_id", "date"]).reset_index(drop=True)
 
 

@@ -11,6 +11,7 @@ Shared by ml/ (ingest, training) and the backend, same as nba_source.py.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -158,31 +159,39 @@ def _fingerprint(conn, table: str) -> str:
     return f"{count}|{latest.isoformat() if latest else ''}"
 
 
-def _read_table(table: str) -> pd.DataFrame:
+def _read_table(table: str, columns: list[str] | None = None, dtypes: dict[str, str] | None = None) -> pd.DataFrame:
     """Download a table, or reuse the local cache if the table hasn't changed."""
-    cache_file = CACHE_DIR / f"{table}.parquet"
-    meta_file = CACHE_DIR / f"{table}.json"
+    # One cache file per column selection, so a narrower read never reuses a
+    # wider one's file (or the other way round).
+    key = table if columns is None else f"{table}-{hashlib.sha1(','.join(columns).encode()).hexdigest()[:8]}"
+    cache_file = CACHE_DIR / f"{key}.parquet"
+    meta_file = CACHE_DIR / f"{key}.json"
     with connect() as conn:
         fingerprint = _fingerprint(conn, table)
         if cache_file.exists() and meta_file.exists():
             if json.loads(meta_file.read_text()).get("fingerprint") == fingerprint:
                 return pd.read_parquet(cache_file)
-        df = _download(conn, table)
+        df = _download(conn, table, columns, dtypes)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_file, index=False)
     meta_file.write_text(json.dumps({"fingerprint": fingerprint}))
     return df
 
 
-def _download(conn, table: str) -> pd.DataFrame:
+def _download(conn, table: str, columns: list[str] | None = None, dtypes: dict[str, str] | None = None) -> pd.DataFrame:
+    # Selecting only the needed columns server-side keeps both the transfer and
+    # the memory spike small (the API host has 512 MB).
+    select = "*" if columns is None else ", ".join(columns)
     buf = io.BytesIO()
-    with conn.cursor().copy(f"copy {table} to stdout with (format csv, header)") as copy:
+    with conn.cursor().copy(f"copy (select {select} from {table}) to stdout with (format csv, header)") as copy:
         for chunk in copy:
             buf.write(chunk)
     buf.seek(0)
     df = pd.read_csv(
         buf,
-        dtype={"game_id": str, "season_id": str},
+        # Parsing straight into compact types (categories, small ints) avoids a
+        # full-size intermediate copy - the biggest memory spike of a reload.
+        dtype={"game_id": str, "season_id": str, **(dtypes or {})},
         true_values=["t"],
         false_values=["f"],
         keep_default_na=False,
@@ -190,25 +199,39 @@ def _download(conn, table: str) -> pd.DataFrame:
     )
     if "game_date" in df:
         df["game_date"] = pd.to_datetime(df["game_date"])
-    return df.drop(columns="ingested_at")
+    return df.drop(columns="ingested_at", errors="ignore")
 
 
-def _read_parquet(raw_dir: Path, kind: str) -> pd.DataFrame:
-    if kind == "teams":
-        return pd.read_parquet(raw_dir / "teams.parquet")
-    files = sorted(raw_dir.glob(f"{kind}_*.parquet"))
-    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True).rename(columns=str.lower)
+def _read_parquet_file(path: Path, columns: list[str] | None) -> pd.DataFrame:
+    if columns is None:
+        return pd.read_parquet(path).rename(columns=str.lower)
+    # The ingest writes nba_api's uppercase names; match them case-insensitively.
+    import pyarrow.parquet as pq
+
+    actual = {name.lower(): name for name in pq.read_schema(path).names}
+    return pd.read_parquet(path, columns=[actual[c] for c in columns]).rename(columns=str.lower)
 
 
-def read(kind: str, raw_dir: Path) -> pd.DataFrame:
-    """Raw rows for one kind, lowercase columns. Falls back to parquet if the
-    database can't be reached, so the site still runs offline."""
+def _read_parquet(raw_dir: Path, kind: str, columns: list[str] | None = None) -> pd.DataFrame:
+    files = [raw_dir / "teams.parquet"] if kind == "teams" else sorted(raw_dir.glob(f"{kind}_*.parquet"))
+    return pd.concat([_read_parquet_file(f, columns) for f in files], ignore_index=True)
+
+
+def read(
+    kind: str, raw_dir: Path, columns: list[str] | None = None, dtypes: dict[str, str] | None = None
+) -> pd.DataFrame:
+    """Raw rows for one kind, lowercase columns (all, or just `columns`),
+    optionally converted to compact `dtypes` (e.g. {"player_name": "category"}).
+    Falls back to parquet if the database can't be reached, so the site still
+    runs offline."""
     if using_database():
         try:
-            return _read_table(TABLES[kind][0])
+            df = _read_table(TABLES[kind][0], columns, dtypes)
+            return df.astype(dtypes) if dtypes else df
         except Exception as exc:  # network down, project paused, ...
             print(f"[raw_store] database read failed ({exc.__class__.__name__}: {exc}); using parquet")
-    return _read_parquet(raw_dir, kind)
+    df = _read_parquet(raw_dir, kind, columns)
+    return df.astype(dtypes) if dtypes else df
 
 
 def data_version(raw_dir: Path) -> str:
