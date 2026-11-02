@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 import pandas as pd
@@ -28,13 +29,20 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Sports Insight API", lifespan=lifespan)
 
+# Origins allowed to call the API from a browser. Local dev on any localhost
+# port is always allowed - Vite silently bumps to 5174+ when 5173 is taken,
+# which would otherwise break every request with an opaque CORS rejection.
+# The deployed frontend is added through env vars on the host:
+#   CORS_ORIGINS=https://sports-insight.vercel.app            (exact origins, comma-separated)
+#   CORS_ORIGIN_REGEX=https://sports-insight-[a-z0-9-]+\.vercel\.app   (e.g. Vercel preview URLs)
+_LOCAL_ORIGINS = r"http://(localhost|127\.0\.0\.1):\d+"
+_extra_regex = os.getenv("CORS_ORIGIN_REGEX", "").strip()
+
 app.add_middleware(
     CORSMiddleware,
-    # Matches any localhost dev port, not just Vite's default 5173 - Vite silently
-    # bumps to 5174+ when 5173 is already taken, which otherwise breaks every
-    # frontend request with an opaque CORS rejection rather than a clear error.
-    allow_origin_regex=r"http://localhost:\d+",
-    allow_methods=["*"],
+    allow_origins=[o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()],
+    allow_origin_regex=f"{_LOCAL_ORIGINS}|{_extra_regex}" if _extra_regex else _LOCAL_ORIGINS,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 

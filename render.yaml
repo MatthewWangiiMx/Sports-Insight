@@ -1,0 +1,31 @@
+# Render Blueprint for the API (https://render.com/docs/blueprint-spec).
+# Render reads this when you create a Blueprint from the GitHub repo.
+services:
+  - type: web
+    name: sports-insight-api
+    runtime: python
+    # Same AWS region as the Supabase database (us-east-1), so loading the
+    # data at startup and the 5-minute freshness checks stay fast.
+    region: virginia
+    # free: sleeps after 15 min without visitors (~30-60 s to wake).
+    # 0.5c-512mb (paid "Starter"): always on. Both have 512 MB; the API uses ~300 MB.
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    # The app imports the shared ml/ modules and model, so it runs from the
+    # repo checkout with backend/ as the working directory.
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    # Only deploy commits that passed CI (.github/workflows/ci.yml).
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.7
+      # Fewer glibc malloc arenas for the background refresh thread - keeps
+      # memory from fragmenting upward on a 512 MB instance.
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      # Secrets / per-deploy values: Render asks for these when the Blueprint is created.
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

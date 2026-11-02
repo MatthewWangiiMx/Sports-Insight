@@ -102,3 +102,14 @@ def test_leaders_sorted_and_validated():
     assert [r["value"] for r in rows] == sorted((r["value"] for r in rows), reverse=True)
     assert client.get("/leaders", params={"stat": "nonsense"}).status_code == 400
     assert len(client.get("/leaders", params={"stat": "reb", "limit": 500}).json()) <= 50
+
+
+@pytest.mark.parametrize(
+    ("origin", "allowed"),
+    [("http://localhost:5173", True), ("http://127.0.0.1:5174", True), ("https://evil.example.com", False)],
+)
+def test_cors_allows_local_dev_and_blocks_unknown_sites(origin, allowed):
+    r = client.options(
+        "/teams", headers={"Origin": origin, "Access-Control-Request-Method": "GET"}
+    )
+    assert (r.headers.get("access-control-allow-origin") == origin) is allowed
