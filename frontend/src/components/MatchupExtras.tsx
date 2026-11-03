@@ -1,5 +1,5 @@
 import type { ModelInfo, StandingsRow, Team, TeamSeasonStats } from '../api'
-import { teamTheme } from '../branding'
+import { matchupThemes } from '../branding'
 import { num, pct, signed } from '../format'
 import { TeamLogo } from './Logos'
 
@@ -35,6 +35,7 @@ interface TaleProps {
 }
 
 export function TaleOfTheTape({ home, away, homeStats, awayStats }: TaleProps) {
+  const [homeTheme, awayTheme] = matchupThemes(home.abbreviation, away.abbreviation)
   return (
     <section className="panel tape">
       <div className="card-head">
@@ -61,8 +62,8 @@ export function TaleOfTheTape({ home, away, homeStats, awayStats }: TaleProps) {
               <div className="tape-middle">
                 <span className="tape-label">{row.label}</span>
                 <div className="tape-bar">
-                  <span className="tape-fill home" style={{ ...teamTheme(home.abbreviation), width: `${homeShare}%` }} />
-                  <span className="tape-fill away" style={{ ...teamTheme(away.abbreviation), width: `${100 - homeShare}%` }} />
+                  <span className="tape-fill home" style={{ ...homeTheme, width: `${homeShare}%` }} />
+                  <span className="tape-fill away" style={{ ...awayTheme, width: `${100 - homeShare}%` }} />
                 </div>
               </div>
               <span className={`tape-value right ${edge < -0.02 ? 'better' : ''}`}>{row.format(a)}</span>

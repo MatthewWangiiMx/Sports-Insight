@@ -53,8 +53,58 @@ export function headshotUrl(playerId: number, large = false): string {
   return `https://cdn.nba.com/headshots/nba/latest/${size}/${playerId}.png`
 }
 
+function colorsFor(abbreviation: string | undefined): [string, string] {
+  return (abbreviation && TEAMS[abbreviation]?.colors) || FALLBACK_COLORS
+}
+
+function themeOf([main, accent]: [string, string]): CSSProperties {
+  return { '--team-1': main, '--team-2': accent } as CSSProperties
+}
+
 // CSS custom properties consumed by .hero and friends in App.css.
 export function teamTheme(abbreviation: string | undefined): CSSProperties {
-  const [primary, secondary] = (abbreviation && TEAMS[abbreviation]?.colors) || FALLBACK_COLORS
-  return { '--team-1': primary, '--team-2': secondary } as CSSProperties
+  return themeOf(colorsFor(abbreviation))
+}
+
+// How different two colors look (0 = identical, ~765 = black vs white). The
+// "redmean" formula: plain RGB distance, weighted the way the eye weighs
+// red/green/blue differences, which is close to perceptual at a fraction of
+// the cost of a full Lab conversion.
+export function colorDistance(a: string, b: string): number {
+  const rgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16)
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+  const [r1, g1, b1] = rgb(a)
+  const [r2, g2, b2] = rgb(b)
+  const rMean = (r1 + r2) / 2
+  const [dr, dg, db] = [r1 - r2, g1 - g2, b1 - b2]
+  return Math.sqrt((2 + rMean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rMean) / 256) * db * db)
+}
+
+// Below this, two main colors read as the "same color family" side by side
+// (e.g. Thunder vs Knicks blue = 36, Celtics vs Bucks green = 110).
+export const CLASH_DISTANCE = 130
+
+/**
+ * Colors for two teams shown together. Like an "alternate kit" in sports
+ * broadcasts: if their main colors clash, the away team switches to its
+ * secondary color - or, if that still clashes, the home team does - so the two
+ * sides stay distinguishable in every bar, tag and card.
+ */
+export function matchupThemes(home: string | undefined, away: string | undefined): [CSSProperties, CSSProperties] {
+  // Only a real pair can clash - with one side still unpicked, keep the chosen team's own colors.
+  if (!home || !away) return [teamTheme(home), teamTheme(away)]
+  const [hp, hs] = colorsFor(home)
+  const [ap, as] = colorsFor(away)
+  // In order of preference: both main colors, away alternate, home alternate, both alternate.
+  const options: [[string, string], [string, string]][] = [
+    [[hp, hs], [ap, as]],
+    [[hp, hs], [as, ap]],
+    [[hs, hp], [ap, as]],
+    [[hs, hp], [as, ap]],
+  ]
+  const gap = ([h, a]: (typeof options)[number]) => colorDistance(h[0], a[0])
+  const pick = options.find((o) => gap(o) >= CLASH_DISTANCE) ?? options.reduce((best, o) => (gap(o) > gap(best) ? o : best))
+  return [themeOf(pick[0]), themeOf(pick[1])]
 }

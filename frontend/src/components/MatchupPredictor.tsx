@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   getHeadToHead,
   getModelInfo,
@@ -13,7 +13,7 @@ import {
   type Team,
   type TeamSeasonStats,
 } from '../api'
-import { teamTheme } from '../branding'
+import { matchupThemes } from '../branding'
 import { num } from '../format'
 import { TeamLogo } from './Logos'
 import { MarqueeMatchups, ModelCard, TaleOfTheTape } from './MatchupExtras'
@@ -115,6 +115,9 @@ export function MatchupPredictor() {
   }
 
   const toId = (value: string) => (value === '' ? '' : Number(value))
+  // Shared by everything showing both teams, so clashing colors are swapped consistently.
+  const [homeTheme, awayTheme] = matchupThemes(homeTeam?.abbreviation, awayTeam?.abbreviation)
+  const [resultHomeTheme, resultAwayTheme] = matchupThemes(result?.home_team.abbreviation, result?.away_team.abbreviation)
 
   return (
     <div className="predict-page">
@@ -123,6 +126,7 @@ export function MatchupPredictor() {
           <TeamSlot
             side="Home"
             team={homeTeam}
+            theme={homeTheme}
             teams={teams}
             value={homeId}
             onChange={(v) => pick(toId(v), awayId)}
@@ -145,6 +149,7 @@ export function MatchupPredictor() {
           <TeamSlot
             side="Away"
             team={awayTeam}
+            theme={awayTheme}
             teams={teams}
             value={awayId}
             onChange={(v) => pick(homeId, toId(v))}
@@ -209,14 +214,14 @@ export function MatchupPredictor() {
             <div className="prob-bar">
               <div
                 className="prob-segment home"
-                style={{ ...teamTheme(result.home_team.abbreviation), width: `${result.home_win_probability * 100}%` }}
+                style={{ ...resultHomeTheme, width: `${result.home_win_probability * 100}%` }}
               >
                 {result.home_win_probability >= 0.12 &&
                   `${result.home_team.abbreviation} ${(result.home_win_probability * 100).toFixed(1)}%`}
               </div>
               <div
                 className="prob-segment away"
-                style={{ ...teamTheme(result.away_team.abbreviation), width: `${result.away_win_probability * 100}%` }}
+                style={{ ...resultAwayTheme, width: `${result.away_win_probability * 100}%` }}
               >
                 {result.away_win_probability >= 0.12 &&
                   `${result.away_team.abbreviation} ${(result.away_win_probability * 100).toFixed(1)}%`}
@@ -242,7 +247,7 @@ export function MatchupPredictor() {
                       key={f.label}
                       className="factor-row team-colored"
                       // Tag and bar take the color of the team this factor favors.
-                      style={teamTheme(f.favors === 'home' ? result.home_team.abbreviation : result.away_team.abbreviation)}
+                      style={f.favors === 'home' ? resultHomeTheme : resultAwayTheme}
                     >
                       <div className="factor-top">
                         <span className="factor-label">
@@ -286,6 +291,8 @@ export function MatchupPredictor() {
 interface TeamSlotProps {
   side: 'Home' | 'Away'
   team: Team | undefined
+  // Colors for this side - may be the team's alternate if the two teams' colors clash.
+  theme: CSSProperties
   teams: Team[]
   value: number | ''
   onChange: (value: string) => void
@@ -295,11 +302,11 @@ interface TeamSlotProps {
 
 // One side of the matchup stage: logo (or a placeholder), the team picker, and
 // a one-line summary - recolored in the team's colors once chosen.
-function TeamSlot({ side, team, teams, value, onChange, standing, probability }: TeamSlotProps) {
+function TeamSlot({ side, team, theme, teams, value, onChange, standing, probability }: TeamSlotProps) {
   return (
     <div
       className={`team-slot ${team ? 'filled' : ''} ${probability != null && probability >= 0.5 ? 'favored' : ''}`}
-      style={team ? teamTheme(team.abbreviation) : undefined}
+      style={team ? theme : undefined}
     >
       {team ? (
         <TeamLogo key={team.id} abbreviation={team.abbreviation} teamId={team.id} size={84} className="slot-logo" />
