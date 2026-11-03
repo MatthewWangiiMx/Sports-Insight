@@ -74,6 +74,23 @@ class PredictionFactor(BaseModel):
     impact_pct: float
 
 
+class ModelDriver(BaseModel):
+    label: str
+    weight: float  # share of the model's total coefficient size, 0-1
+
+
+class ModelInfo(BaseModel):
+    version: str
+    test_accuracy: float
+    test_auc: float
+    test_games: int
+    test_season: int
+    training_games: int
+    training_seasons: list[int]
+    drivers: list[ModelDriver]
+    min_games_for_model: int
+
+
 class PredictRequest(BaseModel):
     home_team_id: int
     away_team_id: int

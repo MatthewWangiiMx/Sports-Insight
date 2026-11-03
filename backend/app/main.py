@@ -6,10 +6,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import data, players
-from .model import InsufficientHistoryError, ModelNotTrainedError, predict_home_win_probability
+from .model import InsufficientHistoryError, ModelNotTrainedError, model_info, predict_home_win_probability
 from .schemas import (
     HeadToHead,
     LeaderEntry,
+    ModelInfo,
     PlayerStats,
     PlayerSummary,
     PredictRequest,
@@ -128,6 +129,14 @@ def leaders(stat: str = "pts", season: int | None = None, limit: int = 10) -> li
     if stat not in players.LEADER_STATS:
         raise HTTPException(status_code=400, detail=f"stat must be one of: {', '.join(players.LEADER_STATS)}")
     return players.leaders(season if season is not None else data.LATEST_SEASON, stat, max(1, min(limit, 50)))
+
+
+@app.get("/model", response_model=ModelInfo)
+def get_model_info() -> dict:
+    try:
+        return model_info()
+    except ModelNotTrainedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/predict/winprob", response_model=PredictResponse)

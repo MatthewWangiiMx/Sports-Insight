@@ -72,3 +72,16 @@ def test_early_season_falls_back_to_elo(long_df):
 def test_before_a_teams_first_game_ever_is_rejected(long_df):
     first_day = long_df["date"].min()
     assert predict(home_team_id=1, away_team_id=2, game_date=str(first_day.date())).status_code == 422
+
+
+@needs_model
+def test_model_card_info():
+    body = client.get("/model").json()
+    assert body["version"] == model.MODEL_VERSION
+    assert 0.5 < body["test_accuracy"] < 1 and 0.5 < body["test_auc"] < 1
+    weights = [d["weight"] for d in body["drivers"]]
+    assert sum(weights) == pytest.approx(1)
+    assert weights == sorted(weights, reverse=True)
+    # Every model feature belongs to exactly one driver group.
+    grouped = [f for features in model.FACTOR_GROUPS.values() for f in features]
+    assert sorted(grouped) == sorted(model._BUNDLE["features"])

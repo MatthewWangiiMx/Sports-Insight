@@ -7,6 +7,7 @@ table - so serving can't silently drift from what the model was trained on.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 
@@ -19,12 +20,36 @@ if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
 from ratings import elo_win_probability  # noqa: E402
-from team_form import MIN_PRIOR_GAMES, add_matchup_features, elo_as_of, resolve_season, team_form_as_of  # noqa: E402
+from team_form import (  # noqa: E402
+    MIN_PRIOR_GAMES,
+    MODEL_STAT_PREFIXES,
+    ROLLING_WINDOWS,
+    add_matchup_features,
+    elo_as_of,
+    resolve_season,
+    team_form_as_of,
+)
 
 MODEL_VERSION = "winprob_v3"
 # Reported instead of MODEL_VERSION when the early-season Elo fallback is used.
 ELO_FALLBACK_VERSION = "elo_early_season"
 MODEL_PATH = ML_DIR / "models" / f"{MODEL_VERSION}.pkl"
+METRICS_PATH = ML_DIR / "models" / f"{MODEL_VERSION}_metrics.json"
+# Seasons behind the saved metrics (see ml/prepare_features.py).
+TRAIN_SEASONS, TEST_SEASON = (2016, 2023), 2025
+
+# Model features grouped into the plain-English drivers on the model card.
+# Grouping matters: related features (e.g. win rate over the last 5 and last 10
+# games) overlap, so their individual weights can even come out with opposite
+# signs - only their combined size is meaningful.
+FACTOR_GROUPS = {
+    "Elo rating": ["elo_diff"],
+    "Recent form (last 5 & 10 games)": [f"{p}_last{w}_diff" for p in MODEL_STAT_PREFIXES for w in ROLLING_WINDOWS],
+    "Roster strength": ["roster_strength_diff"],
+    "Rest & back-to-backs": ["rest_days_diff", "home_is_back_to_back", "away_is_back_to_back"],
+    "Season win rate": ["win_pct_season_diff"],
+    "Playoff game": ["postseason"],
+}
 
 TOP_FACTOR_COUNT = 5
 
@@ -139,6 +164,34 @@ def predict_home_win_probability(
         "model_version": MODEL_VERSION,
         "factors": factors,
         "note": None,
+    }
+
+
+def model_info() -> dict:
+    """What the predictor is and how well it does - for the model card on the
+    Predict page. Weights are each driver's share of the model's total
+    (standardized) coefficient size, a rough "how much it leans on this"."""
+    if _BUNDLE is None or not METRICS_PATH.exists():
+        raise ModelNotTrainedError(f"no model metrics at {METRICS_PATH.relative_to(REPO_ROOT)}")
+    metrics = json.loads(METRICS_PATH.read_text())
+    clf = _BUNDLE["model"].named_steps["clf"]
+    size = dict(zip(_BUNDLE["features"], (abs(float(c)) for c in clf.coef_[0])))
+    total = sum(size.values())
+    drivers = [
+        {"label": label, "weight": sum(size.get(f, 0.0) for f in features) / total}
+        for label, features in FACTOR_GROUPS.items()
+    ]
+    test = metrics["results"]["test"]
+    return {
+        "version": MODEL_VERSION,
+        "test_accuracy": test["accuracy"],
+        "test_auc": test["auc"],
+        "test_games": test["n"],
+        "test_season": TEST_SEASON,
+        "training_games": metrics["results"]["train"]["n"],
+        "training_seasons": list(TRAIN_SEASONS),
+        "drivers": sorted(drivers, key=lambda d: d["weight"], reverse=True),
+        "min_games_for_model": MIN_PRIOR_GAMES,
     }
 
 
