@@ -183,6 +183,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface ModelDriver {
+  label: string
+  // Share of the model's total weight, 0-1.
+  weight: number
+}
+
+export interface ModelInfo {
+  version: string
+  test_accuracy: number
+  test_auc: number
+  test_games: number
+  test_season: number
+  training_games: number
+  training_seasons: [number, number]
+  drivers: ModelDriver[]
+  min_games_for_model: number
+}
+
+export function getModelInfo(): Promise<ModelInfo> {
+  return request('/model')
+}
+
 export function getTeams(): Promise<Team[]> {
   return request('/teams')
 }

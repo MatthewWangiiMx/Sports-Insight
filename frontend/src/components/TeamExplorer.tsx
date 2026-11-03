@@ -124,10 +124,7 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
 
       <div className="team-detail themed" style={teamTheme(selectedTeam?.abbreviation)}>
         {selectedId == null ? (
-          <div className="empty-state">
-            <BasketballIcon />
-            <p className="hint">Select a team to see its season record.</p>
-          </div>
+          <TeamGrid teams={teams} onSelect={selectTeam} />
         ) : (
           <>
             {selectedTeam && (
@@ -262,6 +259,38 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// Shown before a team is picked: every team's logo, by conference, one click away.
+function TeamGrid({ teams, onSelect }: { teams: Team[]; onSelect: (id: number) => void }) {
+  if (teams.length === 0) {
+    return (
+      <div className="empty-state">
+        <BasketballIcon />
+        <p className="hint">Loading teams...</p>
+      </div>
+    )
+  }
+  return (
+    <div className="team-grid-wrap">
+      <p className="hint">Pick a team for its record, Elo trend, advanced stats and roster.</p>
+      {['East', 'West'].map((conf) => (
+        <section key={conf} className="team-grid-section">
+          <h4 className="section-title">{conf === 'East' ? 'Eastern' : 'Western'} Conference</h4>
+          <div className="team-grid">
+            {teams
+              .filter((t) => t.conference === conf)
+              .map((t) => (
+                <button key={t.id} type="button" className="team-tile" style={teamTheme(t.abbreviation)} onClick={() => onSelect(t.id)}>
+                  <TeamLogo abbreviation={t.abbreviation} teamId={t.id} size={44} />
+                  <span className="team-tile-name">{t.full_name.split(' ').slice(-1)[0]}</span>
+                </button>
+              ))}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }
