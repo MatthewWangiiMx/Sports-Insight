@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getRoster,
   getTeamStats,
@@ -11,9 +11,10 @@ import {
 import { teamTheme } from '../branding'
 import { num, pct, rankTone, signed } from '../format'
 import { Headshot, TeamLogo } from './Logos'
+import { GameChart, GamesTable } from './GameChart'
+import { GameModal } from './GameModal'
 import { SeasonPicker } from './SeasonPicker'
 import { Skeleton } from './Skeleton'
-import { Sparkline } from './Sparkline'
 
 const ADVANCED_GROUPS: { title: string; stats: { key: AdvancedStatKey; label: string; format: (v: number) => string }[] }[] = [
   {
@@ -57,6 +58,13 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
   const [roster, setRoster] = useState<RosterEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The bottom section shows either the roster or the season's games.
+  const [lowerView, setLowerView] = useState<'roster' | 'games'>('roster')
+  const [focusGame, setFocusGame] = useState<number | null>(null)
+  // Game whose box score popup is open.
+  const [openGameId, setOpenGameId] = useState<string | null>(null)
+  const lowerSection = useRef<HTMLElement>(null)
+  const closeGame = useCallback(() => setOpenGameId(null), [])
 
   useEffect(() => {
     getTeams()
@@ -73,6 +81,7 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
     if (selectedId == null) return
     setLoading(true)
     setError(null)
+    setFocusGame(null)
     Promise.all([getTeamStats(selectedId, season ?? undefined), getRoster(selectedId, season ?? undefined)])
       .then(([teamStats, teamRoster]) => {
         setStats(teamStats)
@@ -181,19 +190,22 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                   </div>
                 </div>
 
-                <div className="trend-pair">
-                  <div className="trend">
-                    <span className="stat-label">Point differential, game by game</span>
-                    <Sparkline
-                      values={stats.game_log.map((g) => g.point_diff)}
-                      wins={stats.game_log.map((g) => g.win)}
-                    />
-                  </div>
-                  <div className="trend">
-                    <span className="stat-label">Elo rating (line = 1500, average)</span>
-                    <Sparkline values={stats.game_log.map((g) => g.elo)} baseline={1500} />
-                  </div>
-                </div>
+                <section className="section">
+                  <h4 className="section-title">
+                    Point differential, game by game <span className="hint-inline">hover a bar for details, click it for the box score</span>
+                  </h4>
+                  <GameChart
+                    key={`${stats.team_id}-${stats.season}`}
+                    games={stats.game_log}
+                    onOpenGame={(i) => {
+                      setLowerView('games')
+                      setFocusGame(i)
+                      // After the list renders, bring it into view.
+                      requestAnimationFrame(() => lowerSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+                    }}
+                    onSelectGame={(i) => setOpenGameId(stats.game_log[i].game_id)}
+                  />
+                </section>
 
                 <section className="section">
                   <h4 className="section-title">Advanced <span className="hint-inline">league rank in pill</span></h4>
@@ -216,8 +228,27 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                   </div>
                 </section>
 
-                <section className="section">
-                  <h4 className="section-title">Roster <span className="hint-inline">per game, this team only</span></h4>
+                <section className="section" ref={lowerSection}>
+                  <div className="section-head">
+                    <div className="segmented" role="tablist">
+                      <button type="button" role="tab" aria-selected={lowerView === 'roster'} className={lowerView === 'roster' ? 'active' : ''} onClick={() => setLowerView('roster')}>
+                        Roster
+                      </button>
+                      <button type="button" role="tab" aria-selected={lowerView === 'games'} className={lowerView === 'games' ? 'active' : ''} onClick={() => setLowerView('games')}>
+                        Games
+                      </button>
+                    </div>
+                    <span className="hint-inline">
+                      {lowerView === 'roster' ? 'per game, this team only' : `${stats.game_log.length} regular-season games · click one for the box score`}
+                    </span>
+                  </div>
+                  {lowerView === 'games' ? (
+                    <GamesTable
+                      games={stats.game_log}
+                      focus={focusGame}
+                      onSelectGame={(i) => setOpenGameId(stats.game_log[i].game_id)}
+                    />
+                  ) : (
                   <div className="table-scroll">
                     <table className="data-table">
                       <thead>
@@ -253,12 +284,17 @@ export function TeamExplorer({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </section>
               </>
             )}
           </>
         )}
       </div>
+
+      {openGameId && (
+        <GameModal gameId={openGameId} focusTeamId={selectedId ?? undefined} onClose={closeGame} onOpenPlayer={onOpenPlayer} />
+      )}
     </div>
   )
 }

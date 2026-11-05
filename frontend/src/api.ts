@@ -7,10 +7,15 @@ export interface Team {
 }
 
 export interface GameLogEntry {
+  game_id: string
   date: string
+  opponent_id: number
   opponent_abbreviation: string
   is_home: boolean
+  neutral_site: boolean
   win: boolean
+  team_score: number
+  opp_score: number
   point_diff: number
   elo: number
 }
@@ -124,6 +129,7 @@ export interface PlayerAverages {
 }
 
 export interface PlayerGameLogEntry {
+  game_id: string
   date: string
   team_abbreviation: string
   opponent_abbreviation: string
@@ -181,6 +187,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.detail ?? `${res.status} ${res.statusText}`)
   }
   return res.json() as Promise<T>
+}
+
+export interface BoxScoreLine {
+  player_id: number
+  name: string
+  min: number
+  pts: number
+  reb: number
+  ast: number
+  stl: number
+  blk: number
+  tov: number
+  fgm: number
+  fga: number
+  fg3m: number
+  fg3a: number
+  ftm: number
+  fta: number
+  plus_minus: number
+}
+
+export interface GameSide {
+  team: Team
+  score: number
+  win: boolean
+  elo_before: number
+  elo_after: number
+  totals: Record<'fgm' | 'fga' | 'fg3m' | 'fg3a' | 'ftm' | 'fta' | 'reb' | 'ast' | 'stl' | 'blk' | 'tov', number>
+  players: BoxScoreLine[]
+}
+
+export interface GameDetail {
+  game_id: string
+  date: string
+  season: number
+  postseason: boolean
+  neutral_site: boolean
+  home: GameSide
+  away: GameSide
+  // What the model would have said before tip-off; null for neutral sites or too little history.
+  prediction: { home_win_probability: number; model_version: string; correct: boolean } | null
+}
+
+export function getGame(gameId: string): Promise<GameDetail> {
+  return request(`/games/${gameId}`)
 }
 
 export interface ModelDriver {

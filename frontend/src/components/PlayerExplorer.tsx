@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getLeaders,
   getPlayerStats,
@@ -8,8 +8,9 @@ import {
   type PlayerStats,
   type PlayerSummary,
 } from '../api'
-import { teamTheme } from '../branding'
+import { teamIdFor, teamTheme } from '../branding'
 import { num, pct, signed } from '../format'
+import { GameModal } from './GameModal'
 import { Headshot, TeamLogo } from './Logos'
 import { SeasonPicker } from './SeasonPicker'
 import { Skeleton } from './Skeleton'
@@ -79,7 +80,7 @@ export function PlayerExplorer({ playerId, onSelectPlayer }: PlayerExplorerProps
           // The player list is sorted latest season first, so its head is the latest season.
           <LeadersBoard onSelectPlayer={onSelectPlayer} latestSeason={players[0]?.last_season} />
         ) : (
-          <PlayerDetail key={playerId} playerId={playerId} onBack={() => onSelectPlayer(null)} />
+          <PlayerDetail key={playerId} playerId={playerId} onBack={() => onSelectPlayer(null)} onOpenPlayer={onSelectPlayer} />
         )}
       </div>
     </div>
@@ -220,9 +221,18 @@ function LeadersBoard({
   )
 }
 
-function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => void }) {
+interface PlayerDetailProps {
+  playerId: number
+  onBack: () => void
+  onOpenPlayer: (playerId: number) => void
+}
+
+function PlayerDetail({ playerId, onBack, onOpenPlayer }: PlayerDetailProps) {
   const [season, setSeason] = useState<number | null>(null)
   const [stats, setStats] = useState<PlayerStats | null>(null)
+  // Box score popup for one game of his log: [game id, his team's id that night].
+  const [openGame, setOpenGame] = useState<[string, number | undefined] | null>(null)
+  const closeGame = useCallback(() => setOpenGame(null), [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -324,13 +334,13 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
           </div>
 
           <section className="section">
-            <h4 className="section-title">Game log <span className="hint-inline">most recent first</span></h4>
+            <h4 className="section-title">Game log <span className="hint-inline">most recent first &middot; click a game for the box score</span></h4>
             <div className="table-scroll tall">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Opp</th>
+                    <th className="name-cell">Opp</th>
                     <th>Result</th>
                     <th>MIN</th>
                     <th>PTS</th>
@@ -343,7 +353,7 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
                 </thead>
                 <tbody>
                   {log.map((g) => (
-                    <tr key={g.date}>
+                    <tr key={g.date} className="clickable" onClick={() => setOpenGame([g.game_id, teamIdFor(g.team_abbreviation)])}>
                       <td>{g.date.slice(5)}</td>
                       <td className="name-cell">
                         <span className="team-inline">
@@ -369,6 +379,10 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
             </div>
           </section>
         </>
+      )}
+
+      {openGame && (
+        <GameModal gameId={openGame[0]} focusTeamId={openGame[1]} onClose={closeGame} onOpenPlayer={onOpenPlayer} />
       )}
     </div>
   )

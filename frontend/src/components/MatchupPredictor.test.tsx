@@ -25,7 +25,8 @@ function stats(team: Team, netRtg: number): TeamSeasonStats {
       pace: ranked(99), efg: ranked(0.56), opp_efg: ranked(0.52), tov_pct: ranked(0.12), oreb_pct: ranked(0.27), ft_rate: ranked(0.2),
     },
     game_log: [true, true, false, true, true].map((win, i) => ({
-      date: `2026-10-2${i}`, opponent_abbreviation: 'BOS', is_home: true, win, point_diff: win ? 5 : -5, elo: ELO[team.id],
+      game_id: `g${i}`, date: `2026-10-2${i}`, opponent_id: BOS.id, opponent_abbreviation: 'BOS', is_home: true, neutral_site: false, win,
+      team_score: win ? 110 : 100, opp_score: win ? 105 : 105, point_diff: win ? 5 : -5, elo: ELO[team.id],
     })),
   }
 }
