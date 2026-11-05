@@ -33,6 +33,9 @@ def test_team_stats_count_regular_season_only(long_df):
     assert body["wins"] == int(regular["win"].sum())
     assert body["wins"] + body["losses"] == body["games_played"]
     assert len(body["game_log"]) == len(regular)
+    for g in body["game_log"]:
+        assert g["point_diff"] == g["team_score"] - g["opp_score"]
+        assert g["win"] == (g["team_score"] > g["opp_score"])
     assert body["advanced"]["net_rtg"]["rank"] in range(1, len(TEAM_IDS) + 1)
 
 
@@ -113,3 +116,35 @@ def test_cors_allows_local_dev_and_blocks_unknown_sites(origin, allowed):
         "/teams", headers={"Origin": origin, "Access-Control-Request-Method": "GET"}
     )
     assert (r.headers.get("access-control-allow-origin") == origin) is allowed
+
+
+def test_game_detail_box_score(long_df, raw_dir):
+    game_id = long_df[(long_df["season"] == 2024) & long_df["is_home"] & ~long_df["neutral_site"]]["game_id"].iloc[10]
+    body = client.get(f"/games/{game_id}").json()
+    rows = long_df[long_df["game_id"] == game_id].set_index("team_id")
+    assert body["home"]["score"] == rows.loc[body["home"]["team"]["id"], "team_score"]
+    assert body["away"]["score"] == rows.loc[body["away"]["team"]["id"], "team_score"]
+    assert body["home"]["win"] != body["away"]["win"]
+    # Only players who got minutes, most minutes first.
+    pg = pd.read_parquet(raw_dir / "player_games_2024.parquet")
+    played = pg[(pg["GAME_ID"] == game_id) & (pg["MIN"] > 0)]
+    for side in ("home", "away"):
+        players = body[side]["players"]
+        assert len(players) == (played["TEAM_ID"] == body[side]["team"]["id"]).sum()
+        assert [p["min"] for p in players] == sorted((p["min"] for p in players), reverse=True)
+    # The generated league draws player stats independently of team totals,
+    # so compare a player row against the raw file rather than the score.
+    first = body["home"]["players"][0]
+    raw = played[played["PLAYER_ID"] == first["player_id"]].iloc[0]
+    assert (first["pts"], first["reb"], first["min"]) == (raw["PTS"], raw["REB"], raw["MIN"])
+
+
+def test_game_detail_unknown_game_is_404():
+    assert client.get("/games/0000000000").status_code == 404
+
+
+def test_game_ids_in_logs_open_the_game():
+    log = client.get("/teams/3/stats", params={"season": 2024}).json()["game_log"]
+    assert client.get(f"/games/{log[0]['game_id']}").status_code == 200
+    player_log = client.get("/players/301/stats", params={"season": 2024}).json()["game_log"]
+    assert client.get(f"/games/{player_log[0]['game_id']}").status_code == 200

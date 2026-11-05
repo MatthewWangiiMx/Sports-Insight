@@ -15,10 +15,15 @@ class TeamOut(BaseModel):
 
 
 class GameLogEntry(BaseModel):
+    game_id: str
     date: date
+    opponent_id: int
     opponent_abbreviation: str
     is_home: bool
+    neutral_site: bool
     win: bool
+    team_score: int
+    opp_score: int
     point_diff: int
     elo: float
 
@@ -72,6 +77,68 @@ class PredictionFactor(BaseModel):
     label: str
     favors: Literal["home", "away"]
     impact_pct: float
+
+
+class BoxScoreLine(BaseModel):
+    player_id: int
+    name: str
+    min: int
+    pts: int
+    reb: int
+    ast: int
+    stl: int
+    blk: int
+    tov: int
+    fgm: int
+    fga: int
+    fg3m: int
+    fg3a: int
+    ftm: int
+    fta: int
+    plus_minus: int
+
+
+class TeamTotals(BaseModel):
+    fgm: int
+    fga: int
+    fg3m: int
+    fg3a: int
+    ftm: int
+    fta: int
+    reb: int
+    ast: int
+    stl: int
+    blk: int
+    tov: int
+
+
+class GameSide(BaseModel):
+    team: TeamOut
+    score: int
+    win: bool
+    elo_before: float
+    elo_after: float
+    totals: TeamTotals
+    players: list[BoxScoreLine]
+
+
+class PregamePrediction(BaseModel):
+    home_win_probability: float
+    model_version: str
+    # Did the side the model favored win?
+    correct: bool
+
+
+class GameDetail(BaseModel):
+    game_id: str
+    date: date
+    season: int
+    postseason: bool
+    neutral_site: bool
+    home: GameSide
+    away: GameSide
+    # What the model would have said before tip-off (None for neutral sites or too little history).
+    prediction: PregamePrediction | None
 
 
 class ModelDriver(BaseModel):
@@ -136,6 +203,7 @@ class PlayerAverages(BaseModel):
 
 
 class PlayerGameLogEntry(BaseModel):
+    game_id: str
     date: date
     team_abbreviation: str
     opponent_abbreviation: str

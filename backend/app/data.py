@@ -220,10 +220,15 @@ def team_season_stats(team_id: int, season: int) -> dict | None:
     abbr_by_id = TEAMS.set_index("id")["abbreviation"]
     game_log = [
         {
+            "game_id": row["game_id"],
             "date": row["date"].date(),
+            "opponent_id": int(row["opponent_id"]),
             "opponent_abbreviation": abbr_by_id.get(row["opponent_id"], "???"),
             "is_home": bool(row["is_home"]),
+            "neutral_site": bool(row["neutral_site"]),
             "win": bool(row["win"]),
+            "team_score": int(row["team_score"]),
+            "opp_score": int(row["opp_score"]),
             "point_diff": int(row["point_diff"]),
             "elo": float(row["elo_post"]),
         }
@@ -312,6 +317,47 @@ def head_to_head(team_a_id: int, team_b_id: int) -> dict:
         "games_played": games_played,
         "last_meeting_date": last_meeting_date,
         "last_meeting_winner_id": last_meeting_winner_id,
+    }
+
+
+# Player box-score columns shown for one game, in display order.
+BOX_SCORE_STATS = ["min", "pts", "reb", "ast", "stl", "blk", "tov", "fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "plus_minus"]
+_TEAM_TOTALS = ["fgm", "fga", "fg3m", "fg3a", "ftm", "fta", "reb", "ast", "stl", "blk", "tov"]
+
+
+def game_detail(game_id: str) -> dict | None:
+    """One game's final score and full box score for both teams. "home" is the
+    host; for a neutral-site game it's simply the first-listed team."""
+    rows = TEAM_GAMES_LONG[TEAM_GAMES_LONG["game_id"] == game_id]
+    if len(rows) != 2:
+        return None
+    rows = rows.sort_values(["is_home", "team_id"], ascending=[False, True])
+    players = PLAYER_GAMES[PLAYER_GAMES["game_id"] == game_id]
+    first = rows.iloc[0]
+
+    def side(row) -> dict:
+        box = players[players["team_id"] == row["team_id"]].sort_values(["min", "pts"], ascending=False)
+        return {
+            "team": get_team(int(row["team_id"])),
+            "score": int(row["team_score"]),
+            "win": bool(row["win"]),
+            "elo_before": float(row["elo"]),
+            "elo_after": float(row["elo_post"]),
+            "totals": {c: int(row[c]) for c in _TEAM_TOTALS},
+            "players": [
+                {"player_id": int(p.player_id), "name": str(p.player_name), **{c: int(getattr(p, c)) for c in BOX_SCORE_STATS}}
+                for p in box.itertuples(index=False)
+            ],
+        }
+
+    return {
+        "game_id": game_id,
+        "date": first["date"].date(),
+        "season": int(first["season"]),
+        "postseason": bool(first["postseason"]),
+        "neutral_site": bool(first["neutral_site"]),
+        "home": side(rows.iloc[0]),
+        "away": side(rows.iloc[1]),
     }
 
 

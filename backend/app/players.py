@@ -92,6 +92,7 @@ def player_stats(player_id: int, season: int | None) -> dict | None:
     teams = rows.drop_duplicates("team_id")["team_abbreviation"].tolist()
     game_log = [
         {
+            "game_id": r.game_id,
             "date": r.date.date(),
             "team_abbreviation": r.team_abbreviation,
             "opponent_abbreviation": r.matchup.split()[-1],

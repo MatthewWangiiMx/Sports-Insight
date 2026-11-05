@@ -85,3 +85,14 @@ def test_model_card_info():
     # Every model feature belongs to exactly one driver group.
     grouped = [f for features in model.FACTOR_GROUPS.values() for f in features]
     assert sorted(grouped) == sorted(model._BUNDLE["features"])
+
+
+@needs_model
+def test_game_detail_includes_the_pregame_prediction(pregame):
+    games = build_game_features(pregame.copy())
+    enough = (games["home_games_played_season"] >= MIN_PRIOR_GAMES) & (games["away_games_played_season"] >= MIN_PRIOR_GAMES)
+    game = games[enough].iloc[5]
+    body = client.get(f"/games/{game.game_id}").json()
+    expected = model.predict_home_win_probability(game.home_team_id, game.away_team_id, game.date, bool(game.postseason))
+    assert body["prediction"]["home_win_probability"] == pytest.approx(expected["home_win_probability"])
+    assert body["prediction"]["correct"] == ((expected["home_win_probability"] >= 0.5) == bool(game.home_win))

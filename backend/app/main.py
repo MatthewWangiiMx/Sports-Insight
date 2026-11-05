@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import data, players
 from .model import InsufficientHistoryError, ModelNotTrainedError, model_info, predict_home_win_probability
 from .schemas import (
+    GameDetail,
     HeadToHead,
     LeaderEntry,
     ModelInfo,
@@ -129,6 +130,32 @@ def leaders(stat: str = "pts", season: int | None = None, limit: int = 10) -> li
     if stat not in players.LEADER_STATS:
         raise HTTPException(status_code=400, detail=f"stat must be one of: {', '.join(players.LEADER_STATS)}")
     return players.leaders(season if season is not None else data.LATEST_SEASON, stat, max(1, min(limit, 50)))
+
+
+@app.get("/games/{game_id}", response_model=GameDetail)
+def game_detail(game_id: str) -> dict:
+    game = data.game_detail(game_id)
+    if game is None:
+        raise HTTPException(status_code=404, detail=f"no game with id {game_id}")
+    game["prediction"] = None
+    # The model predicts "home team wins", so it only applies with a real host.
+    if not game["neutral_site"]:
+        try:
+            # As of the game's own date, team_form_as_of only sees earlier games -
+            # this is exactly what the model would have said before tip-off.
+            pred = predict_home_win_probability(
+                game["home"]["team"]["id"], game["away"]["team"]["id"], pd.Timestamp(game["date"]), game["postseason"]
+            )
+        except (InsufficientHistoryError, ModelNotTrainedError):
+            pred = None
+        if pred is not None:
+            p = pred["home_win_probability"]
+            game["prediction"] = {
+                "home_win_probability": p,
+                "model_version": pred["model_version"],
+                "correct": (p >= 0.5) == game["home"]["win"],
+            }
+    return game
 
 
 @app.get("/model", response_model=ModelInfo)
