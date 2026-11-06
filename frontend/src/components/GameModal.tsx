@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { getGame, type GameDetail, type GameSide } from '../api'
 import { matchupThemes } from '../branding'
 import { num, signed } from '../format'
@@ -53,11 +54,27 @@ export function GameModal({ gameId, focusTeamId, onClose, onOpenPlayer }: GameMo
     }
   }, [])
 
+  // Line the popup's top edge up with the page's main card (the team or player
+  // panel) - or, if that's scrolled out of view, just below the sticky top bar.
+  const [top, setTop] = useState(24)
+  useLayoutEffect(() => {
+    const barBottom = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0
+    const cardTop = document.querySelector('.page-content .panel')?.getBoundingClientRect().top ?? 0
+    setTop(Math.max(barBottom + 12, cardTop, 12))
+  }, [])
+
   const shownSide = side ?? (game && focusTeamId === game.away.team.id ? 'away' : 'home')
   const [homeTheme, awayTheme] = matchupThemes(game?.home.team.abbreviation, game?.away.team.abbreviation)
 
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+  // Rendered straight into <body>: the page's cards use blur/animation effects,
+  // and those make a position: fixed child fixed to the card instead of the
+  // window - which is what pushed the popup's bottom (and last players) off-screen.
+  return createPortal(
+    <div
+      className="modal-backdrop"
+      style={{ '--modal-top': `${top}px` } as CSSProperties}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div className="modal" role="dialog" aria-modal="true" aria-label="Game details">
         <button ref={closeButton} type="button" className="modal-close" aria-label="Close" onClick={onClose}>
           &times;
@@ -130,7 +147,8 @@ export function GameModal({ gameId, focusTeamId, onClose, onOpenPlayer }: GameMo
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
